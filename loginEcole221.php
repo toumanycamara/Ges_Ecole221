@@ -129,9 +129,9 @@
        (En intégration : liens vers les pages HTML. En PHP : index.php vérifie
         l'identifiant/mot de passe puis redirige selon le rôle en base.) */
     const destinations = {
-      admin:     'dashboard.html',
-      formateur: 'accueil-formateur.html',
-      etudiant:  'tableau-bord-etudiant.html',
+      admin:     'AccueilSecretaire.php',
+      formateur: 'accueilFormateur.php',
+      etudiant:  'accueilEtudiant.php',
     };
     let roleActif = 'admin';
 
