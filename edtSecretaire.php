@@ -1,3 +1,13 @@
+<?php
+session_start();
+if (!isset ($_SESSION['role'])||$_SESSION['role']!=='secretaire') {
+  header('Location: loginEcole221.php');
+  exit;
+}
+
+require 'config.php';
+
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -28,16 +38,7 @@
   <!-- Icônes (sprite SVG) -->
   <svg class="hidden" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
-      <symbol id="i-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="9" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><path d="M9 6h3v12H9M12 12h3"/></symbol>
-      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7l10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
-      <symbol id="i-door" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M3 21h18M14 12v.01"/></symbol>
-      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 21v-1a6 6 0 0 1 12 0v1M16 4.5a3.5 3.5 0 0 1 0 7M22 21v-1a6 6 0 0 0-4-5.6"/></symbol>
-      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
-      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21v-8M12 21V4M19 21v-12"/></symbol>
       <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
-      <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
-      <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
@@ -50,42 +51,10 @@
   </svg>
 
   <!-- ============ SIDEBAR ============ -->
-  <div id="overlay" class="fixed inset-0 z-30 hidden bg-black/50 lg:hidden"></div>
-
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 flex w-[260px] -translate-x-full flex-col justify-between bg-primary shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-transform duration-300 lg:z-20 lg:translate-x-0">
-    <div>
-      <div class="flex h-16 items-center gap-3 px-6">
-        <span class="flex h-11 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-0.5 shadow-sm"><img src="assets/logo-ecole221.png" alt="Logo École 221" class="h-full w-full object-contain" /></span>
-        <span class="text-xl font-semibold tracking-tight text-white">École 221</span>
-        <button id="closeMenu" type="button" aria-label="Fermer le menu" class="ml-auto rounded-lg p-1.5 text-white transition hover:bg-[#B8141F] lg:hidden">
-          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-        </button>
-      </div>
-
-      <nav class="mt-1 flex flex-col gap-2 px-4 pt-4 text-sm font-medium text-white">
-        <a href="AccueilSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-grid" /></svg> Tableau de bord</a>
-        <a href="filiereSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-tree" /></svg> Filières</a>
-        <a href="niveauSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-layers" /></svg> Niveaux</a>
-        <a href="classeSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-door" /></svg> Classes</a>
-        <a href="etudiantSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-user" /></svg> Étudiants</a>
-        <a href="formateurSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-users" /></svg> Formateurs</a>
-        <a href="edtSecretaire.php" class="flex items-center gap-3 rounded-lg bg-white px-5 py-2.5 text-primary shadow-sm"><svg class="h-4 w-4 shrink-0"><use href="#i-calendar" /></svg> Emploi du temps</a>
-        <a href="statistiqueSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-chart" /></svg> Statistiques</a>
-      </nav>
-    </div>
-
-    <div class="flex flex-col items-center gap-2.5 border-t-[0.5px] border-white/25 px-4 py-6">
-      <div class="flex items-center gap-2 rounded-full bg-white/15 px-4 py-1 text-xs text-white">
-        <svg class="h-3 w-3"><use href="#i-pin" /></svg> Dakar, Sénégal
-      </div>
-      <a href="loginEcole221.php" class="flex w-full items-center gap-3 rounded-lg px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]">
-        <svg class="h-4 w-4 shrink-0"><use href="#i-logout" /></svg> Se déconnecter
-      </a>
-    </div>
-  </aside>
+  <?php $active = 'edt'; include 'sidebarSecretaire.php'; ?>
 
   <!-- ============ CONTENU ============ -->
-  <div class="min-h-screen lg:ml-[260px]">
+  <div class="app-content min-h-screen lg:ml-[260px]">
 
     <!-- Navbar -->
     <header class="sticky top-0 z-10 flex h-[100px] items-center justify-between gap-4 bg-white px-4 shadow-sm sm:px-6 lg:px-12">
@@ -278,7 +247,6 @@
       const data = edt[classeActive()] || {};
       let html = '';
       CRENEAUX.forEach((cr) => {
-        // Ligne pause après 10:00 - 12:00
         html += '<tr>';
         html += '<td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">' + cr + '</td>';
         JOURS.forEach((j, idx) => {
@@ -303,7 +271,6 @@
           }
         });
         html += '</tr>';
-        // Pause déjeuner entre 10:00-12:00 et 14:00-16:00
         if (cr === '10:00 - 12:00') {
           html += '<tr><td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">12:00 - 14:00</td>' +
             '<td colspan="5" class="border-b border-[#ececef] bg-[#faf9fb] px-3 py-4 text-center text-xs font-semibold uppercase tracking-wide text-muted">Pause déjeuner</td></tr>';
@@ -326,7 +293,7 @@
     const drawerPanel = drawerAdd.querySelector('aside');
     const fJour = document.getElementById('fJour'), fCreneau = document.getElementById('fCreneau');
     const fMatiere = document.getElementById('fMatiere'), fFormateur = document.getElementById('fFormateur'), fSalle = document.getElementById('fSalle');
-    let cleEnCours = null; // clé en édition
+    let cleEnCours = null;
 
     function ouvrirDrawer(key, prefill) {
       cleEnCours = key;
@@ -349,7 +316,6 @@
     }
     document.getElementById('btnAjouter').addEventListener('click', () => ouvrirDrawer(null, null));
     drawerAdd.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', fermerDrawer));
-    // clic hors du panneau -> fermer
     drawerAdd.addEventListener('click', (e) => { if (!drawerPanel.contains(e.target)) fermerDrawer(); });
 
     document.getElementById('btnEnregistrer').addEventListener('click', () => {
@@ -359,7 +325,6 @@
       }
       const data = edt[classeActive()];
       const nouvelleCle = fJour.value + '|' + fCreneau.value;
-      // si on modifie et que la clé change, on retire l'ancienne
       if (cleEnCours && cleEnCours !== nouvelleCle) delete data[cleEnCours];
       const etait = cleEnCours ? 'modifié' : 'ajouté';
       data[nouvelleCle] = { matiere: fMatiere.value, formateur: fFormateur.value, salle: fSalle.value.trim() };

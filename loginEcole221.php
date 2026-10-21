@@ -1,3 +1,47 @@
+<?php
+
+session_start();
+require 'config.php';
+
+$erreur = "";
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $login      = trim($_POST['login'] ?? '');
+  $motdepasse = ($_POST['mot_de_passe'] ?? '');
+
+  $sql  = "SELECT id_utilisateur, login, mot_de_passe, role, id_etudiant, id_formateur
+           FROM utilisateur WHERE login = :login AND actif = 1";
+  $stmt = $pdo->prepare($sql);
+  $stmt->execute(['login' => $login]);
+  $u = $stmt->fetch();
+
+ 
+
+  if ($u && password_verify($motdepasse, $u['mot_de_passe'])) {
+    $_SESSION['id_utilisateur'] = $u['id_utilisateur'];
+    $_SESSION['login']          = $u['login'];
+    $_SESSION['role']           = $u['role'];
+    $_SESSION['id_etudiant']    = $u['id_etudiant'];
+    $_SESSION['id_formateur']   = $u['id_formateur'];
+
+    // Redirection selon le rôle (les valeurs correspondent à la base)
+    switch ($u['role']) {
+      case 'secretaire':
+        header('Location: AccueilSecretaire.php');
+        exit;
+      case 'formateur':
+        header('Location: accueilFormateur.php');
+        exit;
+      case 'etudiant':
+        header('Location: accueilEtudiant.php');
+        exit;
+      default:
+        $erreur = "Rôle inconnu.";
+    }
+  } else {
+    $erreur = "Identifiant ou mot de passe incorrect.";
+  }
+}
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -28,6 +72,7 @@
       <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a13 13 0 0 1-1.67 2.68M6.6 6.6A13 13 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 4.2-1.02M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
     </defs>
   </svg>
 
@@ -36,7 +81,6 @@
 
     <!-- ===================== PANNEAU GAUCHE ===================== -->
     <div class="relative hidden flex-col justify-between overflow-hidden bg-primary p-8 text-white lg:flex">
-      <!-- Image campus (remplace par ta propre photo : assets/campus-ecole221.jpg) -->
       <img src="https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1200&q=70" alt="Campus École 221" onerror="this.remove()" class="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-40" />
       <div class="absolute inset-0 bg-gradient-to-br from-primary/85 via-primary/75 to-primarydark/90"></div>
 
@@ -55,7 +99,7 @@
       </div>
 
       <div class="relative z-10 inline-flex items-center gap-2 text-xs text-white/70">
-        <svg class="h-4 w-4"><use href="#i-pin" /></svg> Campus Point E · Dakar, Sénégal
+        <svg class="h-4 w-4"><use href="#i-pin" /></svg> Dieupeul Derkle · Dakar, Sénégal
       </div>
     </div>
 
@@ -72,7 +116,14 @@
         <h2 class="text-2xl font-extrabold text-[#1a1b22]">Connexion</h2>
         <p class="mt-1 text-sm text-muted">Sélectionnez votre profil puis connectez-vous.</p>
 
-        <!-- Sélecteur de rôle -->
+        <!-- Message d'erreur -->
+        <?php if ($erreur !== ""): ?>
+        <div class="mt-4 flex items-center gap-2 rounded-lg border border-[#ffd4d4] bg-[#fff1f1] px-3 py-2.5 text-sm text-[#b8001a]">
+          <svg class="h-4 w-4 shrink-0"><use href="#i-alert" /></svg> <?= htmlspecialchars($erreur) ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Sélecteur de rôle (visuel) -->
         <div class="mt-5">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted">Vous êtes</label>
           <div class="mt-2 grid grid-cols-3 gap-2">
@@ -88,13 +139,13 @@
           </div>
         </div>
 
-        <!-- Champs -->
-        <form class="mt-6 flex flex-col gap-4" onsubmit="connecter(event)">
+        <!-- Formulaire : envoi en POST vers cette même page -->
+        <form class="mt-6 flex flex-col gap-4" method="post">
           <label class="block">
             <span class="text-xs font-medium text-muted">Identifiant ou e-mail</span>
             <div class="relative mt-1">
               <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"><svg class="h-4 w-4"><use href="#i-mail" /></svg></span>
-              <input type="text" required placeholder="prenom.nom@ecole221.sn" class="w-full rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input type="text" name="login" required value="<?= htmlspecialchars($_POST['login'] ?? '') ?>" placeholder="prenom.nom@ecole221.sn" class="w-full rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
             </div>
           </label>
 
@@ -102,7 +153,7 @@
             <span class="text-xs font-medium text-muted">Mot de passe</span>
             <div class="relative mt-1">
               <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"><svg class="h-4 w-4"><use href="#i-lock" /></svg></span>
-              <input id="pwd" type="password" required placeholder="••••••••" class="w-full rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-9 pr-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input id="pwd" name="mot_de_passe" type="password" required placeholder="••••••••" class="w-full rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-9 pr-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
               <button type="button" id="togglePwd" aria-label="Afficher le mot de passe" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition hover:text-ink"><svg class="h-4 w-4"><use href="#i-eye" /></svg></button>
             </div>
           </label>
@@ -125,16 +176,8 @@
   </div>
 
   <script>
-    /* ----- Destination par rôle -----
-       (En intégration : liens vers les pages HTML. En PHP : index.php vérifie
-        l'identifiant/mot de passe puis redirige selon le rôle en base.) */
-    const destinations = {
-      admin:     'AccueilSecretaire.php',
-      formateur: 'accueilFormateur.php',
-      etudiant:  'accueilEtudiant.php',
-    };
+    /* ----- Sélecteur de rôle (visuel seulement) ----- */
     let roleActif = 'admin';
-
     const boutonsRole = document.querySelectorAll('.js-role');
     function peindreRoles() {
       boutonsRole.forEach((b) => {
@@ -153,12 +196,6 @@
       pwd.type = show ? 'text' : 'password';
       e.currentTarget.querySelector('use').setAttribute('href', show ? '#i-eye-off' : '#i-eye');
     });
-
-    /* ----- Connexion (redirection selon le rôle) ----- */
-    function connecter(e) {
-      e.preventDefault();
-      window.location.href = destinations[roleActif];
-    }
   </script>
 </body>
 </html>

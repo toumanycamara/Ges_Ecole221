@@ -1,3 +1,13 @@
+<?php
+session_start();
+if (!isset ($_SESSION['role'])||$_SESSION['role']!=='secretaire') {
+  header('Location: loginEcole221.php');
+  exit;
+}
+
+require 'config.php';
+
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -52,46 +62,10 @@
   </svg>
 
   <!-- ============ SIDEBAR ============ -->
-  <!-- Fond sombre (mobile) -->
-  <div id="overlay" class="fixed inset-0 z-30 hidden bg-black/50 lg:hidden"></div>
-
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 flex w-[260px] -translate-x-full flex-col justify-between bg-primary shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-transform duration-300 lg:z-20 lg:translate-x-0">
-    <div>
-      <div class="flex h-16 items-center gap-3 px-6">
-        <span class="flex h-11 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-0.5 shadow-sm"><img src="assets/logo-ecole221.png" alt="Logo École 221" class="h-full w-full object-contain" /></span>
-        <span class="text-xl font-semibold tracking-tight text-white">École 221</span>
-        <button id="closeMenu" type="button" aria-label="Fermer le menu" class="ml-auto rounded-lg p-1.5 text-white transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)] lg:hidden">
-          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-        </button>
-      </div>
-
-      <nav class="mt-1 flex flex-col gap-2 px-4 pt-4 text-sm font-medium text-white">
-        <a href="#" class="flex items-center gap-3 rounded-lg bg-white px-5 py-2.5 text-primary shadow-sm">
-          <svg class="h-4 w-4 shrink-0"><use href="#i-grid" /></svg> Tableau de bord
-        </a>
-        <a href="filiereSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-tree" /></svg> Filières</a>
-        <a href="niveauSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-layers" /></svg> Niveaux</a>
-        <a href="classeSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-door" /></svg> Classes</a>
-        <a href="etudiantSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-user" /></svg> Étudiants</a>
-        <a href="formateurSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-users" /></svg> Formateurs</a>
-        <a href="edtSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-calendar" /></svg> Emploi du temps</a>
-        <a href="statistiqueSecretaire.php" class="flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]"><svg class="h-4 w-4 shrink-0"><use href="#i-chart" /></svg> Statistiques</a>
-      </nav>
-    </div>
-
-    <div class="flex flex-col items-center gap-2.5 border-t-[0.5px] border-white/25 px-4 py-6">
-      <div class="flex items-center gap-2 rounded-full bg-white/15 px-4 py-1 text-xs text-white">
-        <svg class="h-3 w-3"><use href="#i-pin" /></svg> Dakar, Sénégal
-      </div>
-      <a href="#" class="flex w-full items-center gap-3 rounded-lg px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#B8141F] hover:shadow-[6px_0_12px_-2px_rgba(0,0,0,0.35)]">
-        <svg class="h-4 w-4 shrink-0"><use href="#i-logout" /></svg> Se déconnecter
-      </a>
-    </div>
-  </aside>
+  <?php $active = 'dashboard'; include 'sidebarSecretaire.php'; ?>
 
   <!-- ============ CONTENU ============ -->
-  <div class="min-h-screen lg:ml-[260px]">
-
+  <div class="app-content min-h-screen lg:ml-[260px]">
     <!-- Navbar -->
     <header class="sticky top-0 z-10 flex h-[100px] items-center justify-between gap-4 bg-white px-4 shadow-sm sm:px-6 lg:px-12">
       <div class="flex items-center gap-3">

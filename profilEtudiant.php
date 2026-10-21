@@ -1,3 +1,24 @@
+<?php 
+session_start();
+if (!isset ($_SESSION['ROLE'])||$_SESSION['ROLE']!=='etudiant') {
+  header('Location: loginEcole221.php');
+  exit;
+}
+
+require 'config.php';
+
+?>
+
+
+
+
+
+
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
