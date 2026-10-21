@@ -1,12 +1,82 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='secretaire') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'secretaire') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+$erreurCode = "";
+$erreurNom  = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+  // ----- Suppression -----
+  if (isset($_POST['delete_id'])) {
+    $q = $pdo->prepare("SELECT code_filiere, nom_filiere, responsable, description FROM filiere WHERE id_filiere = :id");
+    $q->execute(['id' => $_POST['delete_id']]);
+    $old = $q->fetch();
+
+    $stmt = $pdo->prepare("DELETE FROM filiere WHERE id_filiere = :id");
+    $stmt->execute(['id' => $_POST['delete_id']]);
+
+    $url = 'filiereSecretaire.php?ok=suppression';
+    if ($old) {
+      $url .= '&code=' . urlencode($old['code_filiere'])
+            . '&nom=' . urlencode($old['nom_filiere'])
+            . '&resp=' . urlencode($old['responsable'] ?? '')
+            . '&desc=' . urlencode($old['description'] ?? '');
+    }
+    header('Location: ' . $url);
+    exit;
+  }
+
+  // ----- Ajout ou Modification -----
+  $code = strtoupper(trim($_POST['code'] ?? ''));
+  $nom  = trim($_POST['nom'] ?? '');
+  $resp = trim($_POST['responsable'] ?? '');
+  $desc = trim($_POST['description'] ?? '');
+  $id   = $_POST['id_filiere'] ?? '';
+
+  // Validation : un message par champ obligatoire
+  if (!preg_match('/^[A-Z]{2,5}$/', $code)) {
+    $erreurCode = "Le code doit être 2 à 5 lettres majuscules (ex: GL, ITN).";
+  }
+  if (!preg_match('/^[A-Za-zÀ-ÿ0-9 &\'-]{2,60}$/u', $nom)) {
+    $erreurNom = "Le nom doit faire 2 à 60 caractères.";
+  }
+
+  if ($erreurCode === "" && $erreurNom === "") {
+    try {
+      if ($id === '') {
+        // Ajout
+        $stmt = $pdo->prepare("INSERT INTO filiere (code_filiere, nom_filiere, responsable, description) VALUES (:code, :nom, :resp, :desc)");
+        $stmt->execute(['code' => $code, 'nom' => $nom, 'resp' => $resp, 'desc' => $desc]);
+        header('Location: filiereSecretaire.php?ok=ajout');
+        exit;
+      } else {
+        // Modification
+        $stmt = $pdo->prepare("UPDATE filiere SET code_filiere = :code, nom_filiere = :nom, responsable = :resp, description = :desc WHERE id_filiere = :id");
+        $stmt->execute(['code' => $code, 'nom' => $nom, 'resp' => $resp, 'desc' => $desc, 'id' => $id]);
+        header('Location: filiereSecretaire.php?ok=modification');
+        exit;
+      }
+    } catch (PDOException $e) {
+      $erreurCode = "Ce code de filière existe déjà.";
+    }
+  }
+}
+
+$filieres = $pdo->query("
+  SELECT f.id_filiere, f.code_filiere, f.nom_filiere, f.responsable, f.description,
+         COUNT(e.id_etudiant) AS nb_inscrits
+  FROM filiere f
+  LEFT JOIN classe   c ON c.id_filiere = f.id_filiere
+  LEFT JOIN etudiant e ON e.id_classe  = c.id_classe
+  GROUP BY f.id_filiere, f.code_filiere, f.nom_filiere, f.responsable, f.description
+  ORDER BY f.id_filiere
+")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -38,16 +108,7 @@ require 'config.php';
   <!-- Icônes (sprite SVG) -->
   <svg class="hidden" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
-      <symbol id="i-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="9" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><path d="M9 6h3v12H9M12 12h3"/></symbol>
-      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7l10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
-      <symbol id="i-door" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M3 21h18M14 12v.01"/></symbol>
-      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 21v-1a6 6 0 0 1 12 0v1M16 4.5a3.5 3.5 0 0 1 0 7M22 21v-1a6 6 0 0 0-4-5.6"/></symbol>
       <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
-      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21v-8M12 21V4M19 21v-12"/></symbol>
-      <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
-      <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
-      <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
@@ -97,11 +158,11 @@ require 'config.php';
           <div>
             <div class="flex items-center gap-3">
               <h1 class="text-2xl font-bold leading-8 tracking-[-0.6px] text-[#1a1b22]">Liste des filières</h1>
-              <span id="countBadge" class="rounded-full bg-[#ffdad7] px-2.5 py-0.5 text-xs font-semibold text-primary">6 filières actives</span>
+              <span id="countBadge" class="rounded-full bg-[#ffdad7] px-2.5 py-0.5 text-xs font-semibold text-primary"><?= count($filieres) ?> filière<?= count($filieres) > 1 ? 's' : '' ?> active<?= count($filieres) > 1 ? 's' : '' ?></span>
             </div>
             <p class="mt-1 text-xs text-muted">Programmes académiques et départements d'enseignement supérieur accrédités</p>
           </div>
-          <button type="button" data-open="modalAdd" class="flex items-center justify-center gap-[7px] rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primarydark">
+          <button type="button" id="btnAdd" class="flex items-center justify-center gap-[7px] rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primarydark">
             <svg class="h-3 w-3"><use href="#i-plus" /></svg> Ajouter une filière
           </button>
         </div>
@@ -109,154 +170,33 @@ require 'config.php';
         <!-- Grille de cartes -->
         <section id="grid" class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
 
+          <?php foreach ($filieres as $f): ?>
           <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
             <div class="h-1.5 bg-primary"></div>
             <div class="flex flex-1 flex-col gap-2.5 p-5">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold leading-snug text-[#1a1b22]">Informatique &amp; Technologies Numériques</h3>
-                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">ITN-221</span>
+                <h3 class="js-nom font-bold leading-snug text-[#1a1b22]"><?= htmlspecialchars($f['nom_filiere']) ?></h3>
+                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary"><?= htmlspecialchars($f['code_filiere']) ?></span>
               </div>
-              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> Dr. Amadou Sall</p>
-              <p class="text-sm leading-relaxed text-muted">Formation d'excellence en développement, infrastructures et systèmes d'information.</p>
-              <div>
-                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L1</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L2</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L3</span>
-                </div>
-              </div>
+              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> <?= htmlspecialchars($f['responsable'] ?? '') ?></p>
+              <p class="text-sm leading-relaxed text-muted"><?= htmlspecialchars($f['description'] ?? '') ?></p>
               <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
-                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> 128 inscrits</span>
-                <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
+                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> <?= $f['nb_inscrits'] ?> inscrit<?= $f['nb_inscrits'] > 1 ? 's' : '' ?></span>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="js-edit rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" data-id="<?= $f['id_filiere'] ?>" data-code="<?= htmlspecialchars($f['code_filiere']) ?>" data-nom="<?= htmlspecialchars($f['nom_filiere']) ?>" data-resp="<?= htmlspecialchars($f['responsable'] ?? '') ?>" data-desc="<?= htmlspecialchars($f['description'] ?? '') ?>" aria-label="Modifier la filière"><svg class="h-4 w-4"><use href="#i-edit" /></svg></button>
+                  <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" data-id="<?= $f['id_filiere'] ?>" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
+                </div>
               </div>
             </div>
           </article>
-
-          <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
-            <div class="h-1.5 bg-primary"></div>
-            <div class="flex flex-1 flex-col gap-2.5 p-5">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold leading-snug text-[#1a1b22]">Génie Logiciel</h3>
-                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">GL-221</span>
-              </div>
-              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> Dr. Fatou Ndiaye</p>
-              <p class="text-sm leading-relaxed text-muted">Conception logicielle avancée, DevOps et développement web &amp; mobile.</p>
-              <div>
-                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L3</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">M1</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">M2</span>
-                </div>
-              </div>
-              <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
-                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> 101 inscrits</span>
-                <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
-              </div>
-            </div>
-          </article>
-
-          <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
-            <div class="h-1.5 bg-primary"></div>
-            <div class="flex flex-1 flex-col gap-2.5 p-5">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold leading-snug text-[#1a1b22]">Data Analytics</h3>
-                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">DA-221</span>
-              </div>
-              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> M. Ibrahima Fall</p>
-              <p class="text-sm leading-relaxed text-muted">Science des données, modélisation prédictive et valorisation de l'information.</p>
-              <div>
-                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L3</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">M1</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">M2</span>
-                </div>
-              </div>
-              <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
-                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> 86 inscrits</span>
-                <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
-              </div>
-            </div>
-          </article>
-
-          <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
-            <div class="h-1.5 bg-primary"></div>
-            <div class="flex flex-1 flex-col gap-2.5 p-5">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold leading-snug text-[#1a1b22]">Développement Web</h3>
-                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">DW-221</span>
-              </div>
-              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> Mme Aïssatou Ba</p>
-              <p class="text-sm leading-relaxed text-muted">Intégration front-end, back-end et développement d'applications web modernes.</p>
-              <div>
-                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L1</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L2</span>
-                </div>
-              </div>
-              <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
-                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> 74 inscrits</span>
-                <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
-              </div>
-            </div>
-          </article>
-
-          <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
-            <div class="h-1.5 bg-primary"></div>
-            <div class="flex flex-1 flex-col gap-2.5 p-5">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold leading-snug text-[#1a1b22]">Référent Digital</h3>
-                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">RD-221</span>
-              </div>
-              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> M. Ousmane Diouf</p>
-              <p class="text-sm leading-relaxed text-muted">Transformation digitale, marketing numérique et pilotage de projets digitaux.</p>
-              <div>
-                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L1</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L2</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L3</span>
-                </div>
-              </div>
-              <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
-                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> 59 inscrits</span>
-                <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
-              </div>
-            </div>
-          </article>
-
-          <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
-            <div class="h-1.5 bg-primary"></div>
-            <div class="flex flex-1 flex-col gap-2.5 p-5">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold leading-snug text-[#1a1b22]">Réseaux &amp; Télécommunications</h3>
-                <span class="shrink-0 rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">RT-221</span>
-              </div>
-              <p class="text-sm text-muted"><span class="font-medium text-[#374151]">Responsable :</span> Mme Mariama Sow</p>
-              <p class="text-sm leading-relaxed text-muted">Administration des réseaux et des infrastructures de télécommunication.</p>
-              <div>
-                <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L2</span>
-                  <span class="rounded-md bg-[#ffdad7] px-2 py-0.5 text-xs font-semibold text-primary">L3</span>
-                </div>
-              </div>
-              <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
-                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> 92 inscrits</span>
-                <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" aria-label="Supprimer la filière"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
-              </div>
-            </div>
-          </article>
+          <?php endforeach; ?>
 
         </section>
       </div>
     </main>
   </div>
 
-  <!-- ============ DRAWER : NOUVELLE FILIÈRE ============ -->
+  <!-- ============ DRAWER : AJOUT / MODIFICATION FILIÈRE ============ -->
   <div id="drawerAdd" class="fixed inset-0 z-50 hidden">
     <div data-close class="absolute inset-0 bg-black/50"></div>
     <aside class="absolute inset-y-0 right-0 flex w-full max-w-md translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 ease-out">
@@ -264,47 +204,42 @@ require 'config.php';
         <div class="flex items-center gap-3">
           <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ffdad7] text-primary"><svg class="h-5 w-5"><use href="#i-book" /></svg></span>
           <div>
-            <h3 class="text-lg font-bold text-[#1a1b22]">Nouvelle filière</h3>
-            <p class="text-xs text-muted">Renseignez les détails pour créer une nouvelle filière académique.</p>
+            <h3 class="text-lg font-bold text-[#1a1b22]"><?= ($_POST['id_filiere'] ?? '') !== '' ? 'Modifier la filière' : 'Nouvelle filière' ?></h3>
+            <p class="text-xs text-muted">Renseignez les détails de la filière académique.</p>
           </div>
         </div>
         <button type="button" data-close class="rounded-lg bg-page p-1.5 text-muted hover:bg-[#e8e7ec]" aria-label="Fermer"><svg class="h-5 w-5"><use href="#i-x" /></svg></button>
       </div>
 
-      <form id="filiereForm" class="flex flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
+      <form id="filiereForm" method="post" class="flex flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
 
-        <div class="flex flex-col gap-4">
-          <h4 class="text-xs font-semibold uppercase tracking-wide text-[#1a1b22]">Informations générales</h4>
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-code">Code de la filière</label>
-              <input id="f-code" type="text" placeholder="ex: GL, ITN, DA" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </div>
-            <div>
-              <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-nom">Nom complet de la filière</label>
-              <input id="f-nom" type="text" placeholder="ex: Génie Logiciel" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </div>
+        <input type="hidden" name="id_filiere" id="f-id" value="<?= htmlspecialchars($_POST['id_filiere'] ?? '') ?>" />
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-code">Code de la filière</label>
+            <input id="f-code" type="text" name="code" value="<?= htmlspecialchars($_POST['code'] ?? '') ?>" placeholder="ex: GL, ITN" class="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 <?= $erreurCode !== '' ? 'border-[#ffb3b3] focus:border-[#e11d2a]' : 'border-[#e5e7eb] focus:border-primary' ?>" />
+            <?php if ($erreurCode !== ""): ?>
+              <p class="mt-1.5 flex items-start gap-1.5 text-xs text-[#b8001a]"><svg class="mt-0.5 h-3.5 w-3.5 shrink-0"><use href="#i-alert" /></svg> <span><?= htmlspecialchars($erreurCode) ?></span></p>
+            <?php endif; ?>
           </div>
           <div>
-            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-resp">Responsable</label>
-            <input id="f-resp" type="text" placeholder="ex: Dr. Abdoulaye Sylla" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-nom">Nom complet</label>
+            <input id="f-nom" type="text" name="nom" value="<?= htmlspecialchars($_POST['nom'] ?? '') ?>" placeholder="ex: Génie Logiciel" class="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 <?= $erreurNom !== '' ? 'border-[#ffb3b3] focus:border-[#e11d2a]' : 'border-[#e5e7eb] focus:border-primary' ?>" />
+            <?php if ($erreurNom !== ""): ?>
+              <p class="mt-1.5 flex items-start gap-1.5 text-xs text-[#b8001a]"><svg class="mt-0.5 h-3.5 w-3.5 shrink-0"><use href="#i-alert" /></svg> <span><?= htmlspecialchars($erreurNom) ?></span></p>
+            <?php endif; ?>
           </div>
         </div>
 
         <div>
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted">Niveaux associés</label>
-          <div class="flex flex-wrap items-center gap-5">
-            <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" name="f-niveaux" value="L1" checked class="h-4 w-4 accent-primary" /> L1</label>
-            <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" name="f-niveaux" value="L2" checked class="h-4 w-4 accent-primary" /> L2</label>
-            <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" name="f-niveaux" value="L3" checked class="h-4 w-4 accent-primary" /> L3</label>
-            <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" name="f-niveaux" value="M1" class="h-4 w-4 accent-primary" /> M1</label>
-            <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" name="f-niveaux" value="M2" class="h-4 w-4 accent-primary" /> M2</label>
-          </div>
+          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-resp">Responsable</label>
+          <input id="f-resp" type="text" name="responsable" value="<?= htmlspecialchars($_POST['responsable'] ?? '') ?>" placeholder="ex: Dr. Abdoulaye Sylla" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
         </div>
 
         <div>
           <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="f-desc">Description</label>
-          <textarea id="f-desc" rows="4" placeholder="Brève description des objectifs pédagogiques et débouchés…" class="w-full resize-none rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"></textarea>
+          <textarea id="f-desc" name="description" rows="4" placeholder="Brève description des objectifs pédagogiques et débouchés…" class="w-full resize-none rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"><?= htmlspecialchars($_POST['description'] ?? '') ?></textarea>
         </div>
       </form>
 
@@ -330,6 +265,19 @@ require 'config.php';
     </div>
   </div>
 
+  <!-- Formulaire caché : suppression -->
+  <form id="deleteForm" method="post" class="hidden">
+    <input type="hidden" name="delete_id" id="delete_id" value="" />
+  </form>
+
+  <!-- Formulaire caché : restauration (annuler la suppression) -->
+  <form id="restoreForm" method="post" class="hidden">
+    <input type="hidden" name="code" id="restore_code" value="" />
+    <input type="hidden" name="nom" id="restore_nom" value="" />
+    <input type="hidden" name="responsable" id="restore_resp" value="" />
+    <input type="hidden" name="description" id="restore_desc" value="" />
+  </form>
+
   <!-- ============ TOASTS ============ -->
   <div id="toasts" class="fixed right-4 top-4 z-[60] flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2"></div>
 
@@ -353,7 +301,7 @@ require 'config.php';
     });
 
     /* ----- Toasts ----- */
-    function showToast(type, title, msg) {
+    function showToast(type, title, msg, action) {
       const map = {
         success: { border: '#16a34a', icon: '#i-check', tint: '#dcfce7', text: '#15803d' },
         error:   { border: '#e11d2a', icon: '#i-alert', tint: '#ffdad7', text: '#b8001a' },
@@ -361,28 +309,34 @@ require 'config.php';
       };
       const c = map[type] || map.info;
       const el = document.createElement('div');
-      el.className = 'flex items-start gap-3 rounded-xl border-l-4 bg-white p-3.5 shadow-md';
+      el.className = 'rounded-xl border-l-4 bg-white p-3.5 shadow-md';
       el.style.borderLeftColor = c.border;
       el.innerHTML =
-        '<span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style="background:' + c.tint + ';color:' + c.text + '"><svg class="h-4 w-4"><use href="' + c.icon + '"/></svg></span>' +
-        '<div class="flex-1"><p class="text-sm font-semibold text-[#1a1b22]">' + title + '</p>' + (msg ? '<p class="text-xs text-muted">' + msg + '</p>' : '') + '</div>' +
-        '<button class="text-muted hover:text-ink" aria-label="Fermer"><svg class="h-4 w-4"><use href="#i-x"/></svg></button>';
-      el.querySelector('button').addEventListener('click', () => el.remove());
+        '<div class="flex items-start gap-3">' +
+          '<span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style="background:' + c.tint + ';color:' + c.text + '"><svg class="h-4 w-4"><use href="' + c.icon + '"/></svg></span>' +
+          '<div class="flex-1"><p class="text-sm font-semibold text-[#1a1b22]">' + title + '</p>' + (msg ? '<p class="text-xs text-muted">' + msg + '</p>' : '') + '</div>' +
+          '<button class="js-close text-muted hover:text-ink" aria-label="Fermer"><svg class="h-4 w-4"><use href="#i-x"/></svg></button>' +
+        '</div>' +
+        (action ? '<div class="mt-2 flex justify-end"><button class="js-action rounded-lg border border-[#e5e7eb] px-3 py-1 text-xs font-medium text-primary hover:bg-page">' + action.label + '</button></div>' : '');
+      el.querySelector('.js-close').addEventListener('click', () => el.remove());
+      if (action) el.querySelector('.js-action').addEventListener('click', () => { action.onClick(); el.remove(); });
       document.getElementById('toasts').appendChild(el);
-      setTimeout(() => el.remove(), 3500);
+      setTimeout(() => el.remove(), action ? 6000 : 3500);
     }
 
-    /* ----- Utilitaires ----- */
+    /* ----- Modale / drawer ----- */
     const modalDelete = document.getElementById('modalDelete');
     const openModal = (m) => { m.classList.remove('hidden'); m.classList.add('flex'); };
     const closeModal = (m) => { m.classList.add('hidden'); m.classList.remove('flex'); };
 
-    /* ----- Drawer d'ajout ----- */
     const drawerAdd = document.getElementById('drawerAdd');
     const drawerPanel = drawerAdd.querySelector('aside');
+    const drawerTitle = drawerAdd.querySelector('h3');
+
     const openDrawer = () => {
       document.getElementById('filiereForm').reset();
-      clearErrors();
+      document.getElementById('f-id').value = '';
+      drawerTitle.textContent = 'Nouvelle filière';
       drawerAdd.classList.remove('hidden');
       requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
       document.body.classList.add('overflow-hidden');
@@ -393,52 +347,46 @@ require 'config.php';
       setTimeout(() => drawerAdd.classList.add('hidden'), 300);
     };
 
-    /* ----- Compteur de filières ----- */
-    const grid = document.getElementById('grid');
-    const countBadge = document.getElementById('countBadge');
-    function updateCount() {
-      const n = grid.querySelectorAll('article').length;
-      countBadge.textContent = n + (n > 1 ? ' filières actives' : ' filière active');
-    }
-
     /* ----- Ajout ----- */
-    document.querySelectorAll('[data-open="modalAdd"]').forEach((b) => b.addEventListener('click', openDrawer));
+    document.getElementById('btnAdd').addEventListener('click', openDrawer);
     drawerAdd.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeDrawer));
-    /* Clic en dehors du panneau (sur le fond sombre) -> ferme */
     drawerAdd.addEventListener('click', (e) => { if (!drawerPanel.contains(e.target)) closeDrawer(); });
 
-    function clearErrors() {
-      ['f-code', 'f-nom'].forEach((id) => document.getElementById(id).classList.remove('border-primary', 'ring-2', 'ring-primary/30'));
+    /* ----- Modification ----- */
+    function openDrawerEdit(id, code, nom, resp, desc) {
+      document.getElementById('filiereForm').reset();
+      document.getElementById('f-id').value = id;
+      document.getElementById('f-code').value = code;
+      document.getElementById('f-nom').value = nom;
+      document.getElementById('f-resp').value = resp;
+      document.getElementById('f-desc').value = desc;
+      drawerTitle.textContent = 'Modifier la filière';
+      drawerAdd.classList.remove('hidden');
+      requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
+      document.body.classList.add('overflow-hidden');
     }
-    document.getElementById('filiereForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      clearErrors();
-      const code = document.getElementById('f-code');
-      const nom = document.getElementById('f-nom');
-      let ok = true;
-      [code, nom].forEach((f) => { if (!f.value.trim()) { f.classList.add('border-primary', 'ring-2', 'ring-primary/30'); ok = false; } });
-      if (!ok) { showToast('error', 'Champs obligatoires', 'Veuillez remplir le code et le nom.'); return; }
-      closeDrawer();
-      showToast('success', 'Filière ajoutée', 'La filière a bien été enregistrée.');
+    document.querySelectorAll('.js-edit').forEach((btn) => {
+      btn.addEventListener('click', () => openDrawerEdit(btn.dataset.id, btn.dataset.code, btn.dataset.nom, btn.dataset.resp, btn.dataset.desc));
     });
 
     /* ----- Suppression ----- */
-    let cardToDelete = null;
+    let idToDelete = null;
     document.querySelectorAll('.js-delete').forEach((btn) => {
       btn.addEventListener('click', () => {
-        cardToDelete = btn.closest('article');
-        document.getElementById('delName').textContent = '« ' + cardToDelete.querySelector('h3').textContent.trim() + ' »';
+        idToDelete = btn.dataset.id;
+        const nom = btn.closest('article').querySelector('.js-nom').textContent.trim();
+        document.getElementById('delName').textContent = '« ' + nom + ' »';
         openModal(modalDelete);
       });
     });
     document.querySelectorAll('[data-cancel-delete]').forEach((b) =>
-      b.addEventListener('click', () => { closeModal(modalDelete); showToast('info', 'Suppression annulée'); })
+      b.addEventListener('click', () => closeModal(modalDelete))
     );
     modalDelete.addEventListener('click', (e) => { if (e.target === modalDelete) closeModal(modalDelete); });
     document.getElementById('confirmDelete').addEventListener('click', () => {
-      if (cardToDelete) { cardToDelete.remove(); cardToDelete = null; updateCount(); }
-      closeModal(modalDelete);
-      showToast('success', 'Filière supprimée', 'La filière a bien été retirée de la liste.');
+      if (!idToDelete) { closeModal(modalDelete); return; }
+      document.getElementById('delete_id').value = idToDelete;
+      document.getElementById('deleteForm').submit();
     });
 
     /* ----- Échap ferme tout ----- */
@@ -446,6 +394,36 @@ require 'config.php';
       if (e.key !== 'Escape') return;
       closeDrawer(); closeModal(modalDelete); toggleMenu(false);
     });
+
+    /* ----- Rouvrir le drawer s'il y a une erreur de validation ----- */
+    <?php if ($erreurCode !== "" || $erreurNom !== ""): ?>
+    drawerAdd.classList.remove('hidden');
+    requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
+    document.body.classList.add('overflow-hidden');
+    <?php endif; ?>
+
+    /* ----- Toasts après une action (ajout / modification / suppression) ----- */
+    <?php if (isset($_GET['ok']) && $_GET['ok'] === 'ajout'): ?>
+    showToast('success', 'Filière ajoutée', 'La filière a bien été enregistrée.');
+    <?php elseif (isset($_GET['ok']) && $_GET['ok'] === 'modification'): ?>
+    showToast('success', 'Filière modifiée', 'Les modifications ont bien été enregistrées.');
+    <?php elseif (isset($_GET['ok']) && $_GET['ok'] === 'suppression'): ?>
+    showToast('success', 'Filière supprimée', 'La filière a bien été retirée de la liste.', {
+      label: 'Annuler',
+      onClick: () => {
+        document.getElementById('restore_code').value = <?= json_encode($_GET['code'] ?? '') ?>;
+        document.getElementById('restore_nom').value  = <?= json_encode($_GET['nom'] ?? '') ?>;
+        document.getElementById('restore_resp').value = <?= json_encode($_GET['resp'] ?? '') ?>;
+        document.getElementById('restore_desc').value = <?= json_encode($_GET['desc'] ?? '') ?>;
+        document.getElementById('restoreForm').submit();
+      }
+    });
+    <?php endif; ?>
+
+    /* ----- Nettoyer l'URL pour que le toast ne revienne pas au rechargement ----- */
+    <?php if (isset($_GET['ok'])): ?>
+    history.replaceState({}, '', 'filiereSecretaire.php');
+    <?php endif; ?>
   </script>
 </body>
 </html>
