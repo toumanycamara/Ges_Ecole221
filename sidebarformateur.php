@@ -57,10 +57,10 @@ function lienF($cle, $active, $base, $on) { return $active === $cle ? $on : $bas
 
     <nav class="mt-1 flex flex-col gap-2 px-4 pt-4 text-sm font-medium text-white">
       <a href="accueilFormateur.php" class="<?= lienF('dashboard', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-grid" /></svg> <span class="label">Tableau de bord</span></a>
-      <a href="etudiants-formateur.php" class="<?= lienF('etudiants', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-user" /></svg> <span class="label">Étudiants</span></a>
-      <a href="notes-formateur.php" class="<?= lienF('notes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-edit" /></svg> <span class="label">Notes</span></a>
-      <a href="presences-formateur.php" class="<?= lienF('presences', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-check" /></svg> <span class="label">Présences</span></a>
-      <a href="emploi-du-temps-formateur.php" class="<?= lienF('edt', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-calendar" /></svg> <span class="label">Emploi du temps</span></a>
+      <a href="etudiantFormateur.php" class="<?= lienF('etudiants', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-user" /></svg> <span class="label">Étudiants</span></a>
+      <a href="noteFormateur.php" class="<?= lienF('notes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-edit" /></svg> <span class="label">Notes</span></a>
+      <a href="presenceFormateur.php" class="<?= lienF('presences', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-check" /></svg> <span class="label">Présences</span></a>
+      <a href="edtFormateur.php" class="<?= lienF('edt', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-calendar" /></svg> <span class="label">Emploi du temps</span></a>
     </nav>
   </div>
 

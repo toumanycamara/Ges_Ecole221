@@ -1,5 +1,4 @@
 <?php
-
 session_start();
 require 'config.php';
 
@@ -8,17 +7,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $login      = trim($_POST['login'] ?? '');
   $motdepasse = ($_POST['mot_de_passe'] ?? '');
 
-  $sql  = "SELECT id_utilisateur, login, mot_de_passe, role, id_etudiant, id_formateur
+  $sql  = "SELECT id_utilisateur, login, nom, prenom, mot_de_passe, role, id_etudiant, id_formateur
            FROM utilisateur WHERE login = :login AND actif = 1";
   $stmt = $pdo->prepare($sql);
   $stmt->execute(['login' => $login]);
   $u = $stmt->fetch();
 
- 
-
   if ($u && password_verify($motdepasse, $u['mot_de_passe'])) {
+
+    // Nom à afficher : on prend le nom/prénom du compte ; sinon la table métier ; sinon le login
+    $nomComplet = trim(($u['prenom'] ?? '') . ' ' . ($u['nom'] ?? ''));
+    if ($nomComplet === '' && $u['role'] === 'formateur' && $u['id_formateur']) {
+      $r = $pdo->prepare("SELECT prenom, nom FROM formateur WHERE id_formateur = :id");
+      $r->execute(['id' => $u['id_formateur']]);
+      if ($x = $r->fetch()) $nomComplet = trim($x['prenom'] . ' ' . $x['nom']);
+    } elseif ($nomComplet === '' && $u['role'] === 'etudiant' && $u['id_etudiant']) {
+      $r = $pdo->prepare("SELECT prenom, nom FROM etudiant WHERE id_etudiant = :id");
+      $r->execute(['id' => $u['id_etudiant']]);
+      if ($x = $r->fetch()) $nomComplet = trim($x['prenom'] . ' ' . $x['nom']);
+    }
+    if ($nomComplet === '') $nomComplet = $u['login'];
+
     $_SESSION['id_utilisateur'] = $u['id_utilisateur'];
     $_SESSION['login']          = $u['login'];
+    $_SESSION['nom_complet']    = $nomComplet;
+    $_SESSION['email']          = $u['login'];
     $_SESSION['role']           = $u['role'];
     $_SESSION['id_etudiant']    = $u['id_etudiant'];
     $_SESSION['id_formateur']   = $u['id_formateur'];

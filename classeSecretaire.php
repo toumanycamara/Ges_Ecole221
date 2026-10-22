@@ -1,28 +1,110 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='secretaire') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'secretaire') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
-?>
+// Nom et email de la personne connectée (affichage en-tête)
+$nomAffiche   = (isset($_SESSION['nom_complet']) && trim($_SESSION['nom_complet']) !== '') ? $_SESSION['nom_complet'] : ($_SESSION['login'] ?? 'Utilisateur');
+$emailAffiche = $_SESSION['email'] ?? ($_SESSION['login'] ?? '');
 
-<?php
-$sql = "SELECT c.id_classe, c.nom_classe, c.salle, c.capacite,
-               f.nom_filiere AS filiere,
-               n.libelle_niveau AS niveau,
-               COUNT(e.id_etudiant) AS effectif
-        FROM classe c
-        JOIN filiere f ON c.id_filiere = f.id_filiere
-        JOIN niveau  n ON c.id_niveau  = n.id_niveau
-        LEFT JOIN etudiant e ON e.id_classe = c.id_classe
-        GROUP BY c.id_classe, c.nom_classe, c.salle, c.capacite, f.nom_filiere, n.libelle_niveau
-        ORDER BY c.nom_classe";
+$erreurNom      = "";
+$erreurFiliere  = "";
+$erreurNiveau   = "";
+$erreurCapacite = "";
 
-$stmt = $pdo->query($sql);
-$classe = $stmt->fetchAll();
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+  // ----- Suppression -----
+  if (isset($_POST['delete_id'])) {
+    $q = $pdo->prepare("SELECT nom_classe, id_filiere, id_niveau, salle, capacite, annee_academique FROM classe WHERE id_classe = :id");
+    $q->execute(['id' => $_POST['delete_id']]);
+    $old = $q->fetch();
+
+    $stmt = $pdo->prepare("DELETE FROM classe WHERE id_classe = :id");
+    $stmt->execute(['id' => $_POST['delete_id']]);
+
+    $url = 'classeSecretaire.php?ok=suppression';
+    if ($old) {
+      $url .= '&nom='     . urlencode($old['nom_classe'])
+            . '&filiere=' . urlencode($old['id_filiere'])
+            . '&niveau='  . urlencode($old['id_niveau'])
+            . '&salle='   . urlencode($old['salle'] ?? '')
+            . '&capacite='. urlencode($old['capacite'] ?? '')
+            . '&annee='   . urlencode($old['annee_academique'] ?? '');
+    }
+    header('Location: ' . $url);
+    exit;
+  }
+
+  // ----- Ajout ou Modification -----
+  $nom      = trim($_POST['nom'] ?? '');
+  $filiere  = $_POST['id_filiere'] ?? '';
+  $niveau   = $_POST['id_niveau'] ?? '';
+  $salle    = trim($_POST['salle'] ?? '');
+  $capacite = trim($_POST['capacite'] ?? '');
+  $annee    = trim($_POST['annee'] ?? '');
+  $id       = $_POST['id_classe'] ?? '';
+
+  if ($annee === '') { $annee = '2024-2025'; }
+
+  // Validation : un message par champ
+  if (!preg_match('/^[A-Za-zÀ-ÿ0-9 \'&-]{2,60}$/u', $nom)) {
+    $erreurNom = "Le nom de la classe doit faire 2 à 60 caractères (lettres, chiffres, espaces).";
+  }
+  if ($filiere === '') {
+    $erreurFiliere = "Veuillez choisir une filière.";
+  }
+  if ($niveau === '') {
+    $erreurNiveau = "Veuillez choisir un niveau.";
+  }
+  if (!ctype_digit($capacite) || (int)$capacite < 1) {
+    $erreurCapacite = "La capacité doit être un nombre supérieur à 0.";
+  }
+
+  if ($erreurNom === "" && $erreurFiliere === "" && $erreurNiveau === "" && $erreurCapacite === "") {
+    try {
+      if ($id === '') {
+        // Ajout
+        $stmt = $pdo->prepare("INSERT INTO classe (nom_classe, id_filiere, id_niveau, salle, capacite, annee_academique)
+                               VALUES (:nom, :filiere, :niveau, :salle, :capacite, :annee)");
+        $stmt->execute(['nom' => $nom, 'filiere' => $filiere, 'niveau' => $niveau, 'salle' => $salle, 'capacite' => $capacite, 'annee' => $annee]);
+        header('Location: classeSecretaire.php?ok=ajout');
+        exit;
+      } else {
+        // Modification
+        $stmt = $pdo->prepare("UPDATE classe SET nom_classe = :nom, id_filiere = :filiere, id_niveau = :niveau,
+                               salle = :salle, capacite = :capacite, annee_academique = :annee WHERE id_classe = :id");
+        $stmt->execute(['nom' => $nom, 'filiere' => $filiere, 'niveau' => $niveau, 'salle' => $salle, 'capacite' => $capacite, 'annee' => $annee, 'id' => $id]);
+        header('Location: classeSecretaire.php?ok=modification');
+        exit;
+      }
+    } catch (PDOException $e) {
+      $erreurNom = "Erreur lors de l'enregistrement de la classe.";
+    }
+  }
+}
+
+// Liste des classes (avec filière, niveau et effectif réel)
+$classe = $pdo->query("
+  SELECT c.id_classe, c.nom_classe, c.salle, c.capacite, c.annee_academique,
+         c.id_filiere, c.id_niveau,
+         f.nom_filiere AS filiere, n.libelle_niveau AS niveau,
+         COUNT(e.id_etudiant) AS effectif
+  FROM classe c
+  JOIN filiere f ON c.id_filiere = f.id_filiere
+  JOIN niveau  n ON c.id_niveau  = n.id_niveau
+  LEFT JOIN etudiant e ON e.id_classe = c.id_classe
+  GROUP BY c.id_classe, c.nom_classe, c.salle, c.capacite, c.annee_academique, c.id_filiere, c.id_niveau, f.nom_filiere, n.libelle_niveau
+  ORDER BY c.nom_classe
+")->fetchAll();
+
+// Listes déroulantes
+$filieresListe = $pdo->query("SELECT id_filiere, nom_filiere FROM filiere ORDER BY nom_filiere")->fetchAll();
+$niveauxListe  = $pdo->query("SELECT id_niveau, libelle_niveau FROM niveau ORDER BY id_niveau")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -61,6 +143,7 @@ $classe = $stmt->fetchAll();
       <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
       <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
     </defs>
   </svg>
 
@@ -86,8 +169,8 @@ $classe = $stmt->fetchAll();
             <span class="absolute inset-0 flex items-center justify-center bg-primarydark/70 text-white opacity-0 transition group-hover:opacity-100"><svg class="h-3.5 w-3.5"><use href="#i-edit" /></svg></span>
           </label>
           <div class="hidden sm:block">
-            <p class="text-sm font-semibold leading-[17.5px]">Moussa Diop</p>
-            <p class="text-xs leading-3 text-muted">m.diop@ecole221.sn</p>
+            <p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p>
+            <p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p>
           </div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
@@ -101,12 +184,12 @@ $classe = $stmt->fetchAll();
         <!-- En-tête de page -->
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-muted">Administration académique • Année 2024-2025</p>
+            <p class="text-xs font-semibold uppercase tracking-wide text-muted">Administration académique</p>
             <h1 class="mt-1 text-2xl font-bold leading-8 tracking-[-0.6px] text-[#1a1b22]">Liste des classes</h1>
             <p class="mt-1 text-xs text-muted">Gestion des promotions et suivi des effectifs par classe</p>
           </div>
           <div class="flex items-center gap-3">
-            <span id="countBadge" class="flex items-center gap-1.5 rounded-full bg-page px-3 py-1.5 text-xs font-semibold text-[#374151]"><svg class="h-3.5 w-3.5 text-muted"><use href="#i-filter" /></svg> 6 classes actives</span>
+            <span id="countBadge" class="flex items-center gap-1.5 rounded-full bg-page px-3 py-1.5 text-xs font-semibold text-[#374151]"><svg class="h-3.5 w-3.5 text-muted"><use href="#i-filter" /></svg> <?= count($classe) ?> classe<?= count($classe) > 1 ? 's' : '' ?> active<?= count($classe) > 1 ? 's' : '' ?></span>
             <button type="button" id="btnAdd" class="flex items-center justify-center gap-[7px] rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primarydark">
               <svg class="h-3 w-3"><use href="#i-plus" /></svg> Ajouter une classe
             </button>
@@ -116,31 +199,44 @@ $classe = $stmt->fetchAll();
         <!-- Grille de cartes -->
         <section id="grid" class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
 
-           <?php foreach ($classe as $c): ?>
-
+          <?php foreach ($classe as $c): ?>
           <article class="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
             <div class="h-1.5 bg-primary"></div>
             <div class="flex flex-1 flex-col gap-3 p-5">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-bold text-[#1a1b22]"><?= htmlspecialchars($c['nom_classe']) ?></h3>
-                <span class="shrink-0 rounded-md border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted"><?= htmlspecialchars($c['salle']) ?></span>
+                <h3 class="js-nom font-bold text-[#1a1b22]"><a href="detailsClasseSecretaire.php?id=<?= $c['id_classe'] ?>" class="hover:text-primary hover:underline"><?= htmlspecialchars($c['nom_classe']) ?></a></h3>
+                <span class="shrink-0 rounded-md border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted"><?= htmlspecialchars($c['salle'] ?? '') ?></span>
               </div>
               <div class="space-y-1 text-sm text-muted">
                 <p><span class="text-[#374151]">Filière :</span> <?= htmlspecialchars($c['filiere']) ?></p>
                 <p><span class="text-[#374151]">Niveau :</span> <?= htmlspecialchars($c['niveau']) ?></p>
                 <p><span class="text-[#374151]">Capacité :</span> <?= htmlspecialchars($c['capacite']) ?> places</p>
               </div>
+              <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
+                <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> <?= $c['effectif'] ?> inscrit<?= $c['effectif'] > 1 ? 's' : '' ?></span>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="js-edit rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white"
+                          data-id="<?= $c['id_classe'] ?>"
+                          data-nom="<?= htmlspecialchars($c['nom_classe']) ?>"
+                          data-filiere="<?= $c['id_filiere'] ?>"
+                          data-niveau="<?= $c['id_niveau'] ?>"
+                          data-salle="<?= htmlspecialchars($c['salle'] ?? '') ?>"
+                          data-capacite="<?= htmlspecialchars($c['capacite']) ?>"
+                          data-annee="<?= htmlspecialchars($c['annee_academique'] ?? '') ?>"
+                          aria-label="Modifier la classe"><svg class="h-4 w-4"><use href="#i-edit" /></svg></button>
+                  <button type="button" class="js-delete rounded-lg p-1.5 text-[#9ca3af] transition hover:bg-primarydark hover:text-white" data-id="<?= $c['id_classe'] ?>" aria-label="Supprimer la classe"><svg class="h-4 w-4"><use href="#i-trash" /></svg></button>
+                </div>
+              </div>
             </div>
           </article>
-
-           <?php endforeach;  ?>
+          <?php endforeach; ?>
 
         </section>
       </div>
     </main>
   </div>
 
-  <!-- ============ DRAWER : NOUVELLE CLASSE ============ -->
+  <!-- ============ DRAWER : AJOUT / MODIFICATION CLASSE ============ -->
   <div id="drawerAdd" class="fixed inset-0 z-50 hidden">
     <div data-close class="absolute inset-0 bg-black/50"></div>
     <aside class="absolute inset-y-0 right-0 flex w-full max-w-md translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 ease-out">
@@ -148,54 +244,74 @@ $classe = $stmt->fetchAll();
         <div class="flex items-center gap-3">
           <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ffdad7] text-primary"><svg class="h-5 w-5"><use href="#i-plus" /></svg></span>
           <div>
-            <h3 class="text-lg font-bold text-[#1a1b22]">Nouvelle classe</h3>
-            <p class="text-xs text-muted">Créer une nouvelle classe et l'attacher à une filière.</p>
+            <h3 class="text-lg font-bold text-[#1a1b22]"><?= ($_POST['id_classe'] ?? '') !== '' ? 'Modifier la classe' : 'Nouvelle classe' ?></h3>
+            <p class="text-xs text-muted">Créer une classe et l'attacher à une filière et un niveau.</p>
           </div>
         </div>
         <button type="button" data-close class="rounded-lg bg-page p-1.5 text-muted hover:bg-[#e8e7ec]" aria-label="Fermer"><svg class="h-5 w-5"><use href="#i-x" /></svg></button>
       </div>
 
-      <form id="classeForm" class="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-[#1a1b22]">Informations de la classe</h4>
+      <form id="classeForm" method="post" class="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
+
+        <input type="hidden" name="id_classe" id="c-id" value="<?= htmlspecialchars($_POST['id_classe'] ?? '') ?>" />
+
         <div>
           <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-nom">Nom de la classe</label>
-          <input id="c-nom" type="text" placeholder="ex: L3 Génie Logiciel" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          <input id="c-nom" type="text" name="nom" value="<?= htmlspecialchars($_POST['nom'] ?? '') ?>" placeholder="ex: L3 Génie Logiciel" class="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 <?= $erreurNom !== '' ? 'border-[#ffb3b3] focus:border-[#e11d2a]' : 'border-[#e5e7eb] focus:border-primary' ?>" />
+          <?php if ($erreurNom !== ""): ?>
+            <p class="mt-1.5 flex items-start gap-1.5 text-xs text-[#b8001a]"><svg class="mt-0.5 h-3.5 w-3.5 shrink-0"><use href="#i-alert" /></svg> <span><?= htmlspecialchars($erreurNom) ?></span></p>
+          <?php endif; ?>
         </div>
+
         <div>
           <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-filiere">Filière</label>
-          <select id="c-filiere" class="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-muted outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+          <select id="c-filiere" name="id_filiere" class="w-full rounded-lg border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 <?= $erreurFiliere !== '' ? 'border-[#ffb3b3] focus:border-[#e11d2a]' : 'border-[#e5e7eb] focus:border-primary' ?>">
             <option value="">Sélectionner une filière</option>
-            <option>Génie Logiciel</option>
-            <option>Développement Web</option>
-            <option>Référent Digital</option>
-            <option>Cyber Sécurité</option>
-            <option>Data Analytics</option>
+            <?php foreach ($filieresListe as $fl): ?>
+              <option value="<?= $fl['id_filiere'] ?>" <?= ($_POST['id_filiere'] ?? '') == $fl['id_filiere'] ? 'selected' : '' ?>><?= htmlspecialchars($fl['nom_filiere']) ?></option>
+            <?php endforeach; ?>
           </select>
+          <?php if ($erreurFiliere !== ""): ?>
+            <p class="mt-1.5 flex items-start gap-1.5 text-xs text-[#b8001a]"><svg class="mt-0.5 h-3.5 w-3.5 shrink-0"><use href="#i-alert" /></svg> <span><?= htmlspecialchars($erreurFiliere) ?></span></p>
+          <?php endif; ?>
         </div>
+
         <div>
           <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-niveau">Niveau</label>
-          <select id="c-niveau" class="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-muted outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+          <select id="c-niveau" name="id_niveau" class="w-full rounded-lg border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 <?= $erreurNiveau !== '' ? 'border-[#ffb3b3] focus:border-[#e11d2a]' : 'border-[#e5e7eb] focus:border-primary' ?>">
             <option value="">Sélectionner un niveau</option>
-            <option>Licence 1</option>
-            <option>Licence 2</option>
-            <option>Licence 3</option>
-            <option>Master 1</option>
-            <option>Master 2</option>
+            <?php foreach ($niveauxListe as $nl): ?>
+              <option value="<?= $nl['id_niveau'] ?>" <?= ($_POST['id_niveau'] ?? '') == $nl['id_niveau'] ? 'selected' : '' ?>><?= htmlspecialchars($nl['libelle_niveau']) ?></option>
+            <?php endforeach; ?>
           </select>
+          <?php if ($erreurNiveau !== ""): ?>
+            <p class="mt-1.5 flex items-start gap-1.5 text-xs text-[#b8001a]"><svg class="mt-0.5 h-3.5 w-3.5 shrink-0"><use href="#i-alert" /></svg> <span><?= htmlspecialchars($erreurNiveau) ?></span></p>
+          <?php endif; ?>
         </div>
-        <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-salle">Salle</label>
-          <input id="c-salle" type="text" placeholder="ex: A2, B1" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-salle">Salle</label>
+            <input id="c-salle" type="text" name="salle" value="<?= htmlspecialchars($_POST['salle'] ?? '') ?>" placeholder="ex: A2" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-capacite">Capacité</label>
+            <input id="c-capacite" type="number" name="capacite" value="<?= htmlspecialchars($_POST['capacite'] ?? '') ?>" placeholder="ex: 40" class="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 <?= $erreurCapacite !== '' ? 'border-[#ffb3b3] focus:border-[#e11d2a]' : 'border-[#e5e7eb] focus:border-primary' ?>" />
+            <?php if ($erreurCapacite !== ""): ?>
+              <p class="mt-1.5 flex items-start gap-1.5 text-xs text-[#b8001a]"><svg class="mt-0.5 h-3.5 w-3.5 shrink-0"><use href="#i-alert" /></svg> <span><?= htmlspecialchars($erreurCapacite) ?></span></p>
+            <?php endif; ?>
+          </div>
         </div>
+
         <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-capacite">Capacité</label>
-          <input id="c-capacite" type="number" placeholder="ex: 40" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-annee">Année académique</label>
+          <input id="c-annee" type="text" name="annee" value="<?= htmlspecialchars($_POST['annee'] ?? '2024-2025') ?>" placeholder="ex: 2024-2025" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
         </div>
       </form>
 
       <div class="grid grid-cols-2 gap-3 border-t border-[#eef0f2] px-6 py-4">
         <button type="button" data-close class="rounded-lg border border-[#e5e7eb] px-5 py-2.5 text-sm font-medium text-[#374151] hover:bg-page">Annuler</button>
-        <button type="submit" form="classeForm" class="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primarydark"><svg class="h-4 w-4"><use href="#i-plus" /></svg> Enregistrer</button>
+        <button type="submit" form="classeForm" class="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primarydark"><svg class="h-4 w-4"><use href="#i-check" /></svg> Enregistrer</button>
       </div>
     </aside>
   </div>
@@ -214,6 +330,21 @@ $classe = $stmt->fetchAll();
       </div>
     </div>
   </div>
+
+  <!-- Formulaire caché : suppression -->
+  <form id="deleteForm" method="post" class="hidden">
+    <input type="hidden" name="delete_id" id="delete_id" value="" />
+  </form>
+
+  <!-- Formulaire caché : restauration (annuler la suppression) -->
+  <form id="restoreForm" method="post" class="hidden">
+    <input type="hidden" name="nom" id="restore_nom" value="" />
+    <input type="hidden" name="id_filiere" id="restore_filiere" value="" />
+    <input type="hidden" name="id_niveau" id="restore_niveau" value="" />
+    <input type="hidden" name="salle" id="restore_salle" value="" />
+    <input type="hidden" name="capacite" id="restore_capacite" value="" />
+    <input type="hidden" name="annee" id="restore_annee" value="" />
+  </form>
 
   <!-- ============ TOASTS ============ -->
   <div id="toasts" class="fixed right-4 top-4 z-[60] flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2"></div>
@@ -237,63 +368,7 @@ $classe = $stmt->fetchAll();
       if (file) document.getElementById('avatarPreview').src = URL.createObjectURL(file);
     });
 
-    /* ----- Compteur réel ----- */
-    (function () {
-      const n = document.querySelectorAll('#grid article').length;
-      document.getElementById('countBadge').lastChild.textContent = ' ' + n + (n > 1 ? ' classes actives' : ' classe active');
-    })();
-
-    /* ----- Modale de suppression ----- */
-    const modalDelete = document.getElementById('modalDelete');
-    const openModal = () => { modalDelete.classList.remove('hidden'); modalDelete.classList.add('flex'); };
-    const closeModal = () => { modalDelete.classList.add('hidden'); modalDelete.classList.remove('flex'); };
-    let cardToDelete = null;
-
-    const updateCount = () => {
-      const n = document.querySelectorAll('#grid article').length;
-      document.getElementById('countBadge').lastChild.textContent = ' ' + n + (n > 1 ? ' classes actives' : ' classe active');
-    };
-
-    /* ----- Clic sur une carte -> fiche ; corbeille -> suppression ----- */
-    document.querySelectorAll('#grid article').forEach((card) => {
-      card.classList.add('relative', 'cursor-pointer');
-      card.addEventListener('click', () => { window.location.href = 'detailsClasseSecretaire.php'; });
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.setAttribute('aria-label', 'Supprimer la classe');
-      btn.className = 'absolute right-3 top-3 z-10 rounded-lg bg-white/90 p-1.5 text-[#9ca3af] shadow-sm transition hover:bg-primary hover:text-white';
-      btn.innerHTML = '<svg class="h-4 w-4"><use href="#i-trash"/></svg>';
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        cardToDelete = card;
-        document.getElementById('delName').textContent = '« ' + card.querySelector('h3').textContent.trim() + ' »';
-        openModal();
-      });
-      card.appendChild(btn);
-    });
-
-    document.querySelectorAll('[data-cancel-delete]').forEach((b) =>
-      b.addEventListener('click', () => { closeModal(); showToast('info', 'Suppression annulée'); })
-    );
-    modalDelete.addEventListener('click', (e) => { if (e.target === modalDelete) closeModal(); });
-    document.getElementById('confirmDelete').addEventListener('click', () => {
-      if (!cardToDelete) { closeModal(); return; }
-      const card = cardToDelete;
-      const parent = card.parentNode;
-      const next = card.nextElementSibling;
-      card.remove();
-      cardToDelete = null;
-      updateCount();
-      closeModal();
-      showToast('success', 'Classe supprimée', 'La classe a bien été retirée de la liste.', () => {
-        if (next) parent.insertBefore(card, next); else parent.appendChild(card);
-        updateCount();
-        showToast('info', 'Suppression annulée', 'La classe a été restaurée.');
-      });
-    });
-
-    /* ----- Toasts (toujours un bouton Annuler) ----- */
+    /* ----- Toasts ----- */
     function showToast(type, title, msg, action) {
       const map = {
         success: { border: '#16a34a', icon: '#i-check', tint: '#dcfce7', text: '#15803d' },
@@ -310,20 +385,26 @@ $classe = $stmt->fetchAll();
           '<div class="flex-1"><p class="text-sm font-semibold text-[#1a1b22]">' + title + '</p>' + (msg ? '<p class="text-xs text-muted">' + msg + '</p>' : '') + '</div>' +
           '<button class="js-close text-muted hover:text-ink" aria-label="Fermer"><svg class="h-4 w-4"><use href="#i-x"/></svg></button>' +
         '</div>' +
-        '<div class="mt-2 flex justify-end"><button class="js-action rounded-lg border border-[#e5e7eb] px-3 py-1 text-xs font-medium text-primary hover:bg-page">Annuler</button></div>';
-      const remove = () => el.remove();
-      el.querySelector('.js-close').addEventListener('click', remove);
-      el.querySelector('.js-action').addEventListener('click', () => { if (action) action(); remove(); });
+        (action ? '<div class="mt-2 flex justify-end"><button class="js-action rounded-lg border border-[#e5e7eb] px-3 py-1 text-xs font-medium text-primary hover:bg-page">' + action.label + '</button></div>' : '');
+      el.querySelector('.js-close').addEventListener('click', () => el.remove());
+      if (action) el.querySelector('.js-action').addEventListener('click', () => { action.onClick(); el.remove(); });
       document.getElementById('toasts').appendChild(el);
-      setTimeout(remove, action ? 6000 : 4000);
+      setTimeout(() => el.remove(), action ? 6000 : 3500);
     }
 
-    /* ----- Drawer d'ajout ----- */
+    /* ----- Modale / drawer ----- */
+    const modalDelete = document.getElementById('modalDelete');
+    const openModal = (m) => { m.classList.remove('hidden'); m.classList.add('flex'); };
+    const closeModal = (m) => { m.classList.add('hidden'); m.classList.remove('flex'); };
+
     const drawerAdd = document.getElementById('drawerAdd');
     const drawerPanel = drawerAdd.querySelector('aside');
+    const drawerTitle = drawerAdd.querySelector('h3');
+
     const openDrawer = () => {
       document.getElementById('classeForm').reset();
-      clearErrors();
+      document.getElementById('c-id').value = '';
+      drawerTitle.textContent = 'Nouvelle classe';
       drawerAdd.classList.remove('hidden');
       requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
       document.body.classList.add('overflow-hidden');
@@ -333,26 +414,88 @@ $classe = $stmt->fetchAll();
       document.body.classList.remove('overflow-hidden');
       setTimeout(() => drawerAdd.classList.add('hidden'), 300);
     };
+
+    /* ----- Ajout ----- */
     document.getElementById('btnAdd').addEventListener('click', openDrawer);
     drawerAdd.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeDrawer));
     drawerAdd.addEventListener('click', (e) => { if (!drawerPanel.contains(e.target)) closeDrawer(); });
 
-    const clearErrors = () => document.getElementById('c-nom').classList.remove('border-primary', 'ring-2', 'ring-primary/30');
+    /* ----- Modification ----- */
+    function openDrawerEdit(d) {
+      document.getElementById('classeForm').reset();
+      document.getElementById('c-id').value       = d.id;
+      document.getElementById('c-nom').value       = d.nom;
+      document.getElementById('c-filiere').value   = d.filiere;
+      document.getElementById('c-niveau').value    = d.niveau;
+      document.getElementById('c-salle').value     = d.salle;
+      document.getElementById('c-capacite').value  = d.capacite;
+      document.getElementById('c-annee').value     = d.annee;
+      drawerTitle.textContent = 'Modifier la classe';
+      drawerAdd.classList.remove('hidden');
+      requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
+      document.body.classList.add('overflow-hidden');
+    }
+    document.querySelectorAll('.js-edit').forEach((btn) => {
+      btn.addEventListener('click', () => openDrawerEdit(btn.dataset));
+    });
 
-    document.getElementById('classeForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      clearErrors();
-      const nom = document.getElementById('c-nom');
-      if (!nom.value.trim()) { nom.classList.add('border-primary', 'ring-2', 'ring-primary/30'); showToast('error', 'Champ obligatoire', 'Veuillez saisir le nom de la classe.'); return; }
-      closeDrawer();
-      showToast('success', 'Classe ajoutée', 'La classe a bien été enregistrée.');
+    /* ----- Suppression ----- */
+    let idToDelete = null;
+    document.querySelectorAll('.js-delete').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        idToDelete = btn.dataset.id;
+        const nom = btn.closest('article').querySelector('.js-nom').textContent.trim();
+        document.getElementById('delName').textContent = '« ' + nom + ' »';
+        openModal(modalDelete);
+      });
+    });
+    document.querySelectorAll('[data-cancel-delete]').forEach((b) =>
+      b.addEventListener('click', () => closeModal(modalDelete))
+    );
+    modalDelete.addEventListener('click', (e) => { if (e.target === modalDelete) closeModal(modalDelete); });
+    document.getElementById('confirmDelete').addEventListener('click', () => {
+      if (!idToDelete) { closeModal(modalDelete); return; }
+      document.getElementById('delete_id').value = idToDelete;
+      document.getElementById('deleteForm').submit();
     });
 
     /* ----- Échap ferme tout ----- */
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
-      closeDrawer(); closeModal(); toggleMenu(false);
+      closeDrawer(); closeModal(modalDelete); toggleMenu(false);
     });
+
+    /* ----- Rouvrir le drawer s'il y a une erreur de validation ----- */
+    <?php if ($erreurNom !== "" || $erreurFiliere !== "" || $erreurNiveau !== "" || $erreurCapacite !== ""): ?>
+    drawerAdd.classList.remove('hidden');
+    requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
+    document.body.classList.add('overflow-hidden');
+    <?php endif; ?>
+
+    /* ----- Toasts après une action ----- */
+    <?php if (isset($_GET['ok']) && $_GET['ok'] === 'ajout'): ?>
+    showToast('success', 'Classe ajoutée', 'La classe a bien été enregistrée.');
+    <?php elseif (isset($_GET['ok']) && $_GET['ok'] === 'modification'): ?>
+    showToast('success', 'Classe modifiée', 'Les modifications ont bien été enregistrées.');
+    <?php elseif (isset($_GET['ok']) && $_GET['ok'] === 'suppression'): ?>
+    showToast('success', 'Classe supprimée', 'La classe a bien été retirée de la liste.', {
+      label: 'Annuler',
+      onClick: () => {
+        document.getElementById('restore_nom').value      = <?= json_encode($_GET['nom'] ?? '') ?>;
+        document.getElementById('restore_filiere').value  = <?= json_encode($_GET['filiere'] ?? '') ?>;
+        document.getElementById('restore_niveau').value   = <?= json_encode($_GET['niveau'] ?? '') ?>;
+        document.getElementById('restore_salle').value    = <?= json_encode($_GET['salle'] ?? '') ?>;
+        document.getElementById('restore_capacite').value = <?= json_encode($_GET['capacite'] ?? '') ?>;
+        document.getElementById('restore_annee').value    = <?= json_encode($_GET['annee'] ?? '') ?>;
+        document.getElementById('restoreForm').submit();
+      }
+    });
+    <?php endif; ?>
+
+    /* ----- Nettoyer l'URL ----- */
+    <?php if (isset($_GET['ok'])): ?>
+    history.replaceState({}, '', 'classeSecretaire.php');
+    <?php endif; ?>
   </script>
 </body>
 </html>

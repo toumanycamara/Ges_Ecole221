@@ -1,12 +1,64 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='secretaire') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'secretaire') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+// Nom et email de la personne connectée (affichage en-tête)
+$nomAffiche   = (isset($_SESSION['nom_complet']) && trim($_SESSION['nom_complet']) !== '') ? $_SESSION['nom_complet'] : ($_SESSION['login'] ?? 'Utilisateur');
+$emailAffiche = $_SESSION['email'] ?? ($_SESSION['login'] ?? '');
+
+// Id de la classe à afficher
+$id = $_GET['id'] ?? 0;
+
+// Infos de la classe (+ filière et niveau)
+$stmt = $pdo->prepare("
+  SELECT c.*, f.nom_filiere, n.libelle_niveau
+  FROM classe c
+  JOIN filiere f ON f.id_filiere = c.id_filiere
+  JOIN niveau  n ON n.id_niveau  = c.id_niveau
+  WHERE c.id_classe = :id
+");
+$stmt->execute(['id' => $id]);
+$classe = $stmt->fetch();
+
+// Si la classe n'existe pas, on retourne à la liste
+if (!$classe) {
+  header('Location: classeSecretaire.php');
+  exit;
+}
+
+// Étudiants de la classe
+$stmt = $pdo->prepare("
+  SELECT id_etudiant, matricule, nom, prenom, sexe
+  FROM etudiant
+  WHERE id_classe = :id
+  ORDER BY nom, prenom
+");
+$stmt->execute(['id' => $id]);
+$etudiants = $stmt->fetchAll();
+
+// Calculs
+$nbTotal  = count($etudiants);
+$nbG = 0;
+$nbF = 0;
+foreach ($etudiants as $e) {
+  if ($e['sexe'] === 'M') { $nbG++; }
+  elseif ($e['sexe'] === 'F') { $nbF++; }
+}
+$capacite = (int)$classe['capacite'];
+$taux = $capacite > 0 ? round(100 * $nbTotal / $capacite) : 0;
+
+// Petit badge sexe
+function sexeBadge($s) {
+  if ($s === 'F') {
+    return '<span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span>';
+  }
+  return '<span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -65,8 +117,8 @@ require 'config.php';
         <div class="flex items-center gap-2">
           <img src="https://i.pravatar.cc/64?img=47" alt="Photo de l'administrateur" class="h-8 w-8 rounded-full object-cover" />
           <div class="hidden sm:block">
-            <p class="text-sm font-semibold leading-[17.5px]">Moussa Diop</p>
-            <p class="text-xs leading-3 text-muted">m.diop@ecole221.sn</p>
+            <p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p>
+            <p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p>
           </div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
@@ -88,15 +140,18 @@ require 'config.php';
           </nav>
           <div class="flex items-center gap-4">
             <a href="classeSecretaire.php" class="text-sm font-medium text-primary hover:underline">Retour à la liste</a>
-            <button type="button" id="btnEdit" class="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primarydark"><svg class="h-4 w-4"><use href="#i-edit" /></svg> Modifier</button>
           </div>
         </div>
 
         <!-- Titre -->
         <div class="flex flex-wrap items-center gap-3">
-          <h1 class="text-2xl font-bold tracking-[-0.6px] text-[#1a1b22]">L3 Génie Logiciel</h1>
-          <span class="rounded-full bg-page px-2.5 py-1 text-xs font-semibold text-[#374151]">Salle A3</span>
-          <span class="rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">Année 2025-2026</span>
+          <h1 class="text-2xl font-bold tracking-[-0.6px] text-[#1a1b22]"><?= htmlspecialchars($classe['nom_classe']) ?></h1>
+          <?php if (!empty($classe['salle'])): ?>
+            <span class="rounded-full bg-page px-2.5 py-1 text-xs font-semibold text-[#374151]">Salle <?= htmlspecialchars($classe['salle']) ?></span>
+          <?php endif; ?>
+          <?php if (!empty($classe['annee_academique'])): ?>
+            <span class="rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">Année <?= htmlspecialchars($classe['annee_academique']) ?></span>
+          <?php endif; ?>
         </div>
 
         <!-- Deux cartes : infos + répartition -->
@@ -106,19 +161,18 @@ require 'config.php';
           <section class="rounded-2xl bg-white p-6 shadow-sm">
             <h2 class="mb-4 text-lg font-bold text-[#1a1b22]">Informations de la classe</h2>
             <dl class="divide-y divide-[#f3f4f6] text-sm">
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Filière</dt><dd class="font-medium text-[#1f2937]">Génie Logiciel</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Niveau</dt><dd class="font-medium text-[#1f2937]">Licence 3</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Salle</dt><dd class="font-medium text-[#1f2937]">A3</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Capacité</dt><dd class="font-medium text-[#1f2937]">40 places</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Inscrits</dt><dd class="font-medium text-[#1f2937]">28 étudiants</dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Filière</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['nom_filiere']) ?></dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Niveau</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['libelle_niveau']) ?></dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Salle</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['salle'] ?? '') ?></dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Capacité</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['capacite']) ?> places</dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Inscrits</dt><dd class="font-medium text-[#1f2937]"><?= $nbTotal ?> étudiant<?= $nbTotal > 1 ? 's' : '' ?></dd></div>
               <div class="flex items-center justify-between py-2.5">
                 <dt class="text-muted">Taux de remplissage</dt>
                 <dd class="flex items-center gap-2">
-                  <span class="h-2 w-24 overflow-hidden rounded-full bg-[#f3f4f6]"><span class="block h-full rounded-full bg-primary" style="width:70%"></span></span>
-                  <span class="text-sm font-semibold text-primary">70%</span>
+                  <span class="h-2 w-24 overflow-hidden rounded-full bg-[#f3f4f6]"><span class="block h-full rounded-full bg-primary" style="width:<?= $taux ?>%"></span></span>
+                  <span class="text-sm font-semibold text-primary"><?= $taux ?>%</span>
                 </dd>
               </div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Formateur principal</dt><dd class="font-semibold text-[#1f2937]">Dr. Mamadou Kane</dd></div>
             </dl>
           </section>
 
@@ -128,15 +182,15 @@ require 'config.php';
             <div class="flex flex-1 items-center justify-center gap-12">
               <div class="flex flex-col items-center gap-2">
                 <div class="flex h-20 w-20 items-center justify-center rounded-full border-[7px] border-[#2563eb] text-[#2563eb]"><svg class="h-8 w-8"><use href="#i-male" /></svg></div>
-                <p class="text-sm text-muted">Garçons: <span class="font-semibold text-[#1f2937]">18</span></p>
+                <p class="text-sm text-muted">Garçons : <span class="font-semibold text-[#1f2937]"><?= $nbG ?></span></p>
               </div>
               <div class="flex flex-col items-center gap-2">
                 <div class="flex h-20 w-20 items-center justify-center rounded-full border-[7px] border-[#db2777] text-[#db2777]"><svg class="h-8 w-8"><use href="#i-female" /></svg></div>
-                <p class="text-sm text-muted">Filles: <span class="font-semibold text-[#1f2937]">10</span></p>
+                <p class="text-sm text-muted">Filles : <span class="font-semibold text-[#1f2937]"><?= $nbF ?></span></p>
               </div>
             </div>
             <div class="mt-4 rounded-xl bg-[#ffdad7] px-4 py-3 text-center text-sm font-semibold text-primary">
-              Moyenne générale de la classe : 13.2 / 20
+              Effectif total : <?= $nbTotal ?> étudiant<?= $nbTotal > 1 ? 's' : '' ?>
             </div>
           </section>
 
@@ -146,7 +200,7 @@ require 'config.php';
         <section class="rounded-2xl bg-white p-6 shadow-sm">
           <h2 class="mb-4 text-lg font-bold text-[#1a1b22]">Liste des étudiants de la classe</h2>
           <div class="overflow-x-auto">
-            <table class="w-full min-w-[760px] text-left text-sm">
+            <table class="w-full min-w-[640px] text-left text-sm">
               <thead class="border-b border-[#e5e7eb] bg-[#f9fafb]">
                 <tr class="text-xs font-semibold uppercase tracking-[0.5px] text-[#6b7280]">
                   <th class="px-4 py-3 font-semibold">N°</th>
@@ -154,95 +208,31 @@ require 'config.php';
                   <th class="px-4 py-3 font-semibold">Nom</th>
                   <th class="px-4 py-3 font-semibold">Prénom</th>
                   <th class="px-4 py-3 font-semibold">Sexe</th>
-                  <th class="px-4 py-3 font-semibold">Moyenne</th>
-                  <th class="px-4 py-3 font-semibold">Statut</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#f3f4f6]">
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">1</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0045</td><td class="px-4 py-3 font-bold">Camara</td><td class="px-4 py-3 text-[#374151]">Toumany</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">14.5 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]">Inscrit</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">2</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0046</td><td class="px-4 py-3 font-bold">Sy</td><td class="px-4 py-3 text-[#374151]">Fatou</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">16.2 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]">Inscrit</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">3</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0047</td><td class="px-4 py-3 font-bold">Diallo</td><td class="px-4 py-3 text-[#374151]">Abdoulaye</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">12.8 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]">Inscrit</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">4</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0048</td><td class="px-4 py-3 font-bold">Ndiaye</td><td class="px-4 py-3 text-[#374151]">Aminata</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">11.0 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-xs font-medium text-[#b45309]">Redoublant</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">5</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0049</td><td class="px-4 py-3 font-bold">Ba</td><td class="px-4 py-3 text-[#374151]">Ibrahima</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">15.3 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]">Inscrit</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">6</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0050</td><td class="px-4 py-3 font-bold">Diop</td><td class="px-4 py-3 text-[#374151]">Mariama</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">13.7 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]">Inscrit</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">7</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0051</td><td class="px-4 py-3 font-bold">Fall</td><td class="px-4 py-3 text-[#374151]">Ousmane</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">9.5 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#fde68a] bg-[#fffbeb] px-2 py-0.5 text-xs font-medium text-[#b45309]">Redoublant</span></td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">8</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0052</td><td class="px-4 py-3 font-bold">Mbodji</td><td class="px-4 py-3 text-[#374151]">Anta</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">17.1 / 20</td><td class="px-4 py-3"><span class="rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]">Inscrit</span></td></tr>
+                <?php if ($nbTotal === 0): ?>
+                  <tr><td colspan="5" class="px-4 py-10 text-center text-sm text-muted">Aucun étudiant inscrit dans cette classe pour l'instant.</td></tr>
+                <?php else: ?>
+                  <?php foreach ($etudiants as $i => $e): ?>
+                  <tr class="hover:bg-[#f9fafb]">
+                    <td class="px-4 py-3 text-muted"><?= $i + 1 ?></td>
+                    <td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]"><?= htmlspecialchars($e['matricule']) ?></td>
+                    <td class="px-4 py-3 font-bold"><?= htmlspecialchars($e['nom']) ?></td>
+                    <td class="px-4 py-3 text-[#374151]"><?= htmlspecialchars($e['prenom']) ?></td>
+                    <td class="px-4 py-3"><?= sexeBadge($e['sexe']) ?></td>
+                  </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
               </tbody>
             </table>
           </div>
-
-          <!-- Pagination -->
-          <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p class="text-xs text-muted">1 à 8 sur 28 étudiants</p>
-            <div class="flex items-center gap-1.5">
-              <button class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-medium text-white">1</button>
-              <button class="flex h-8 w-8 items-center justify-center rounded-lg border border-[#e5e7eb] text-sm font-medium text-[#374151] hover:bg-page">2</button>
-              <button class="flex h-8 w-8 items-center justify-center rounded-lg border border-[#e5e7eb] text-sm font-medium text-[#374151] hover:bg-page">3</button>
-              <button class="flex h-8 w-8 items-center justify-center rounded-lg border border-[#e5e7eb] text-[#374151] hover:bg-page"><svg class="h-4 w-4"><use href="#i-chevron-right" /></svg></button>
-            </div>
-          </div>
+          <p class="mt-4 text-xs text-muted"><?= $nbTotal ?> étudiant<?= $nbTotal > 1 ? 's' : '' ?> au total</p>
         </section>
 
       </div>
     </main>
   </div>
-
-  <!-- ============ DRAWER : MODIFIER LA CLASSE ============ -->
-  <div id="drawerEdit" class="fixed inset-0 z-50 hidden">
-    <div data-close class="absolute inset-0 bg-black/50"></div>
-    <aside class="absolute inset-y-0 right-0 flex w-full max-w-md translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 ease-out">
-      <div class="flex items-start justify-between gap-3 border-b border-[#eef0f2] px-6 py-4">
-        <div class="flex items-center gap-3">
-          <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#ffdad7] text-primary"><svg class="h-5 w-5"><use href="#i-edit" /></svg></span>
-          <div>
-            <h3 class="text-lg font-bold text-[#1a1b22]">Modifier la classe</h3>
-            <p class="text-xs text-muted">Mettez à jour les informations de la classe.</p>
-          </div>
-        </div>
-        <button type="button" data-close class="rounded-lg bg-page p-1.5 text-muted hover:bg-[#e8e7ec]" aria-label="Fermer"><svg class="h-5 w-5"><use href="#i-x" /></svg></button>
-      </div>
-
-      <form id="classeForm" class="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-[#1a1b22]">Informations de la classe</h4>
-        <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-nom">Nom de la classe</label>
-          <input id="c-nom" type="text" value="L3 Génie Logiciel" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-        </div>
-        <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-filiere">Filière</label>
-          <select id="c-filiere" class="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
-            <option selected>Génie Logiciel</option>
-            <option>Développement Web</option>
-            <option>Référent Digital</option>
-            <option>Cyber Sécurité</option>
-            <option>Data Analytics</option>
-          </select>
-        </div>
-        <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-niveau">Niveau</label>
-          <select id="c-niveau" class="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
-            <option>Licence 1</option><option>Licence 2</option><option selected>Licence 3</option><option>Master 1</option><option>Master 2</option>
-          </select>
-        </div>
-        <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-salle">Salle</label>
-          <input id="c-salle" type="text" value="A3" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-        </div>
-        <div>
-          <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted" for="c-capacite">Capacité</label>
-          <input id="c-capacite" type="number" value="40" class="w-full rounded-lg border border-[#e5e7eb] px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-        </div>
-      </form>
-
-      <div class="grid grid-cols-2 gap-3 border-t border-[#eef0f2] px-6 py-4">
-        <button type="button" data-close class="rounded-lg border border-[#e5e7eb] px-5 py-2.5 text-sm font-medium text-[#374151] hover:bg-page">Annuler</button>
-        <button type="submit" form="classeForm" class="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primarydark"><svg class="h-4 w-4"><use href="#i-check" /></svg> Enregistrer</button>
-      </div>
-    </aside>
-  </div>
-
-  <!-- ============ TOASTS ============ -->
-  <div id="toasts" class="fixed right-4 top-4 z-[60] flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2"></div>
 
   <script>
     const sidebar = document.getElementById('sidebar');
@@ -255,43 +245,7 @@ require 'config.php';
     document.getElementById('openMenu').addEventListener('click', () => toggleMenu(true));
     document.getElementById('closeMenu').addEventListener('click', () => toggleMenu(false));
     overlay.addEventListener('click', () => toggleMenu(false));
-
-    /* ----- Toast ----- */
-    function showToast(title, msg) {
-      const el = document.createElement('div');
-      el.className = 'flex items-start gap-3 rounded-xl border-l-4 bg-white p-3.5 shadow-md';
-      el.style.borderLeftColor = '#16a34a';
-      el.innerHTML =
-        '<span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style="background:#dcfce7;color:#15803d"><svg class="h-4 w-4"><use href="#i-check"/></svg></span>' +
-        '<div class="flex-1"><p class="text-sm font-semibold text-[#1a1b22]">' + title + '</p><p class="text-xs text-muted">' + msg + '</p></div>' +
-        '<button class="text-muted hover:text-ink" aria-label="Fermer"><svg class="h-4 w-4"><use href="#i-x"/></svg></button>';
-      el.querySelector('button').addEventListener('click', () => el.remove());
-      document.getElementById('toasts').appendChild(el);
-      setTimeout(() => el.remove(), 3500);
-    }
-
-    /* ----- Drawer Modifier ----- */
-    const drawerEdit = document.getElementById('drawerEdit');
-    const drawerPanel = drawerEdit.querySelector('aside');
-    const openDrawer = () => {
-      drawerEdit.classList.remove('hidden');
-      requestAnimationFrame(() => drawerPanel.classList.remove('translate-x-full'));
-      document.body.classList.add('overflow-hidden');
-    };
-    const closeDrawer = () => {
-      drawerPanel.classList.add('translate-x-full');
-      document.body.classList.remove('overflow-hidden');
-      setTimeout(() => drawerEdit.classList.add('hidden'), 300);
-    };
-    document.getElementById('btnEdit').addEventListener('click', openDrawer);
-    drawerEdit.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeDrawer));
-    drawerEdit.addEventListener('click', (e) => { if (!drawerPanel.contains(e.target)) closeDrawer(); });
-    document.getElementById('classeForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      closeDrawer();
-      showToast('Classe modifiée', 'Les informations ont bien été mises à jour.');
-    });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDrawer(); toggleMenu(false); } });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleMenu(false); });
   </script>
 </body>
 </html>

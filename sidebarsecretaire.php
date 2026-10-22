@@ -4,9 +4,13 @@
   --------------------------------------------
   À utiliser avec :  <?php $active = 'classes'; include 'sidebarSecretaire.php'; ?>
   Valeurs possibles pour $active :
-    dashboard | filieres | niveaux | classes | etudiants | formateurs | edt | statistiques
+    dashboard | filieres | niveaux | classes | etudiants | formateurs | matieres | edt | statistiques
 */
 $active = $active ?? '';
+// Nom et email de la personne connectée (définis ici, utilisables dans l'en-tête des pages)
+$nomAffiche    = (isset($_SESSION['nom_complet']) && trim($_SESSION['nom_complet']) !== '') ? $_SESSION['nom_complet'] : ($_SESSION['login'] ?? 'Utilisateur');
+$emailAffiche  = $_SESSION['email'] ?? ($_SESSION['login'] ?? '');
+$prenomAffiche = explode(' ', trim($nomAffiche))[0];
 // classes communes
 $base = 'flex items-center gap-3 rounded-lg px-5 py-2.5 transition hover:bg-[#B8141F]';
 $on   = 'flex items-center gap-3 rounded-lg bg-white px-5 py-2.5 text-primary shadow-sm';
@@ -25,6 +29,7 @@ function lien($cle, $active, $base, $on) { return $active === $cle ? $on : $base
     <symbol id="sb-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 21v-1a6 6 0 0 1 12 0v1M16 4.5a3.5 3.5 0 0 1 0 7M22 21v-1a6 6 0 0 0-4-5.6"/></symbol>
     <symbol id="sb-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
     <symbol id="sb-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21v-8M12 21V4M19 21v-12"/></symbol>
+    <symbol id="sb-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></symbol>
     <symbol id="sb-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
     <symbol id="sb-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
     <symbol id="sb-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
@@ -67,6 +72,7 @@ function lien($cle, $active, $base, $on) { return $active === $cle ? $on : $base
       <a href="classeSecretaire.php" class="<?= lien('classes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-door" /></svg> <span class="label">Classes</span></a>
       <a href="etudiantSecretaire.php" class="<?= lien('etudiants', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-user" /></svg> <span class="label">Étudiants</span></a>
       <a href="formateurSecretaire.php" class="<?= lien('formateurs', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-users" /></svg> <span class="label">Formateurs</span></a>
+      <a href="matiereSecretaire.php" class="<?= lien('matieres', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-book" /></svg> <span class="label">Matières</span></a>
       <a href="edtSecretaire.php" class="<?= lien('edt', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-calendar" /></svg> <span class="label">Emploi du temps</span></a>
       <a href="statistiqueSecretaire.php" class="<?= lien('statistiques', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-chart" /></svg> <span class="label">Statistiques</span></a>
     </nav>

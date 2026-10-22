@@ -7,6 +7,10 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'secretaire') {
 
 require 'config.php';
 
+// Nom et email de la personne connectée (affichage en-tête)
+$nomAffiche   = (isset($_SESSION['nom_complet']) && trim($_SESSION['nom_complet']) !== '') ? $_SESSION['nom_complet'] : ($_SESSION['login'] ?? 'Utilisateur');
+$emailAffiche = $_SESSION['email'] ?? ($_SESSION['login'] ?? '');
+
 $erreurCode = "";
 $erreurLibelle = "";
 
@@ -129,8 +133,8 @@ $niveaux = $pdo->query("SELECT id_niveau, code_niveau, libelle_niveau FROM nivea
             <span class="absolute inset-0 flex items-center justify-center bg-primarydark/70 text-white opacity-0 transition group-hover:opacity-100"><svg class="h-3.5 w-3.5"><use href="#i-edit" /></svg></span>
           </label>
           <div class="hidden sm:block">
-            <p class="text-sm font-semibold leading-[17.5px]">Moussa Diop</p>
-            <p class="text-xs leading-3 text-muted">m.diop@ecole221.sn</p>
+            <p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p>
+            <p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p>
           </div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
