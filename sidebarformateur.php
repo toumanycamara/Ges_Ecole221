@@ -68,7 +68,7 @@ function lienF($cle, $active, $base, $on) { return $active === $cle ? $on : $bas
 
   <div class="flex flex-col items-center gap-2.5 border-t-[0.5px] border-white/25 px-4 py-6">
     <div class="hide-collapsed flex items-center gap-2 rounded-full bg-white/15 px-4 py-1 text-xs text-white">
-      <svg class="h-3 w-3"><use href="#sb-pin" /></svg> Dakar, Sénégal
+      <svg class="h-3 w-3"><use href="#sb-pin" /></svg> Dieuppeul Derkle, Dakar
     </div>
     <a href="deconnexion.php" class="foot-link flex w-full items-center gap-3 rounded-lg px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#B8141F]">
       <svg class="h-4 w-4 shrink-0"><use href="#sb-logout" /></svg> <span class="label">Se déconnecter</span>

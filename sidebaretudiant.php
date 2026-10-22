@@ -56,15 +56,15 @@ function lienE($cle, $active, $base, $on) { return $active === $cle ? $on : $bas
 
     <nav class="mt-1 flex flex-col gap-2 px-4 pt-4 text-sm font-medium text-white">
       <a href="accueilEtudiant.php" class="<?= lienE('dashboard', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-grid" /></svg> <span class="label">Tableau de bord</span></a>
-      <a href="notes-resultats-etudiant.php" class="<?= lienE('notes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-chart" /></svg> <span class="label">Notes &amp; résultats</span></a>
-      <a href="emploi-du-temps-etudiant.php" class="<?= lienE('edt', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-calendar" /></svg> <span class="label">Emploi du temps</span></a>
-      <a href="mon-profil-etudiant.php" class="<?= lienE('profil', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-user" /></svg> <span class="label">Mon profil</span></a>
+      <a href="noteEtudiant.php" class="<?= lienE('notes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-chart" /></svg> <span class="label">Notes &amp; résultats</span></a>
+      <a href="edtEtudiant.php" class="<?= lienE('edt', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-calendar" /></svg> <span class="label">Emploi du temps</span></a>
+      <a href="profilEtudiant.php" class="<?= lienE('profil', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-user" /></svg> <span class="label">Mon profil</span></a>
     </nav>
   </div>
 
   <div class="flex flex-col items-center gap-2.5 border-t-[0.5px] border-white/25 px-4 py-6">
     <div class="hide-collapsed flex items-center gap-2 rounded-full bg-white/15 px-4 py-1 text-xs text-white">
-      <svg class="h-3 w-3"><use href="#sb-pin" /></svg> Dakar, Sénégal
+      <svg class="h-3 w-3"><use href="#sb-pin" /></svg> Dieuppeul Derkle, Dakar
     </div>
     <a href="deconnexion.php" class="foot-link flex w-full items-center gap-3 rounded-lg px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#B8141F]">
       <svg class="h-4 w-4 shrink-0"><use href="#sb-logout" /></svg> <span class="label">Se déconnecter</span>

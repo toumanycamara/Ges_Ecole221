@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </defs>
   </svg>
 
-  <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary to-primarydark p-4">
+  <div class="flex min-h-screen items-center justify-center bg-page from-primary to-primarydark p-4">
     <div class="grid w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-xl lg:grid-cols-2">
 
     <!-- ===================== PANNEAU GAUCHE ===================== -->
