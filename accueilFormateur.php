@@ -1,12 +1,61 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='formateur') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'formateur') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+$idFormateur = $_SESSION['id_formateur'] ?? 0;
+
+// Infos du formateur connecté (nom, email, photo)
+$stmt = $pdo->prepare("SELECT nom, prenom, email, photo FROM formateur WHERE id_formateur = :id");
+$stmt->execute(['id' => $idFormateur]);
+$moi = $stmt->fetch();
+
+$nomAffiche   = $moi ? trim($moi['prenom'] . ' ' . $moi['nom']) : ($_SESSION['login'] ?? 'Formateur');
+$prenomAffiche = $moi ? $moi['prenom'] : explode(' ', $nomAffiche)[0];
+$emailAffiche = $moi && !empty($moi['email']) ? $moi['email'] : ($_SESSION['login'] ?? '');
+$photo        = $moi && !empty($moi['photo']) ? $moi['photo'] : 'https://i.pravatar.cc/64?img=12';
+
+// Mes classes (celles où j'ai des séances) + effectif réel + filière
+$stmt = $pdo->prepare("
+  SELECT c.id_classe, c.nom_classe, c.capacite, f.nom_filiere,
+         COUNT(DISTINCT e.id_etudiant) AS eff
+  FROM seance s
+  JOIN classe  c ON c.id_classe  = s.id_classe
+  JOIN filiere f ON f.id_filiere = c.id_filiere
+  LEFT JOIN etudiant e ON e.id_classe = c.id_classe
+  WHERE s.id_formateur = :id
+  GROUP BY c.id_classe, c.nom_classe, c.capacite, f.nom_filiere
+  ORDER BY c.nom_classe
+");
+$stmt->execute(['id' => $idFormateur]);
+$mesClasses = $stmt->fetchAll();
+
+// Calculs
+$nbClasses = count($mesClasses);
+$totalEtudiants = 0;
+$filieresSet = [];
+$maxEff = 1;
+foreach ($mesClasses as $c) {
+  $totalEtudiants += (int)$c['eff'];
+  $filieresSet[$c['nom_filiere']] = true;
+  if ((int)$c['eff'] > $maxEff) $maxEff = (int)$c['eff'];
+}
+$nbFilieres = count($filieresSet);
+$listeFilieres = implode(', ', array_keys($filieresSet));
+
+// Nombre de séances
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM seance WHERE id_formateur = :id");
+$stmt->execute(['id' => $idFormateur]);
+$nbSeances = (int)$stmt->fetchColumn();
+
+// Date du jour en français
+$joursFr = ['Sunday' => 'Dimanche', 'Monday' => 'Lundi', 'Tuesday' => 'Mardi', 'Wednesday' => 'Mercredi', 'Thursday' => 'Jeudi', 'Friday' => 'Vendredi', 'Saturday' => 'Samedi'];
+$moisFr  = ['January' => 'Janvier', 'February' => 'Février', 'March' => 'Mars', 'April' => 'Avril', 'May' => 'Mai', 'June' => 'Juin', 'July' => 'Juillet', 'August' => 'Août', 'September' => 'Septembre', 'October' => 'Octobre', 'November' => 'Novembre', 'December' => 'Décembre'];
+$dateJour = $joursFr[date('l')] . ' ' . date('j') . ' ' . $moisFr[date('F')] . ' ' . date('Y');
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -49,8 +98,8 @@ require 'config.php';
       </div>
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <img src="https://i.pravatar.cc/64?img=12" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
-          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]">Dr. Mamadou Kane</p><p class="text-xs leading-3 text-muted">m.kane@ecole221.sn</p></div>
+          <img src="<?= htmlspecialchars($photo) ?>" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
+          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p><p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p></div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
         <span class="whitespace-nowrap rounded-full bg-primary px-2 py-1 text-xs font-semibold text-white shadow-sm">Formateur</span>
@@ -65,53 +114,56 @@ require 'config.php';
           <div class="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/5 blur-xl"></div>
           <div class="relative flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
             <div class="flex flex-col gap-1.5">
-              <h1 class="text-3xl font-bold leading-[44px] tracking-[-0.9px] text-white sm:text-4xl">Bonjour Mamadou, bienvenue sur<br />École 221</h1>
+              <h1 class="text-3xl font-bold leading-[44px] tracking-[-0.9px] text-white sm:text-4xl">Bonjour <?= htmlspecialchars($prenomAffiche) ?>, bienvenue sur<br />École 221</h1>
               <p class="text-base text-[#f4f4f5]">Espace enseignant — vos classes et vos étudiants</p>
             </div>
             <div class="rounded-xl bg-black/10 px-6 py-3.5 text-right backdrop-blur-[2px]">
-              <p class="text-xl font-bold leading-7 text-white">Samedi 27 Septembre 2026</p>
-              <p class="text-sm font-medium tracking-[0.35px] text-white/85">Année 2025-2026</p>
+              <p class="text-xl font-bold leading-7 text-white"><?= $dateJour ?></p>
             </div>
           </div>
         </section>
 
-        <!-- 4 cartes (cadrées sur le formateur) -->
+        <!-- 4 cartes -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <div class="rounded-xl bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between"><span class="text-[11px] font-semibold uppercase tracking-wide text-muted">Mes étudiants</span><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ffdad7] text-primary"><svg class="h-4 w-4"><use href="#i-users" /></svg></span></div>
-            <p class="mt-3 text-3xl font-bold text-[#1a1b22]">75</p><p class="text-xs text-muted">Dans mes classes</p>
+            <p class="mt-3 text-3xl font-bold text-[#1a1b22]"><?= $totalEtudiants ?></p><p class="text-xs text-muted">Dans mes classes</p>
           </div>
           <div class="rounded-xl bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between"><span class="text-[11px] font-semibold uppercase tracking-wide text-muted">Mes classes</span><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ffdad7] text-primary"><svg class="h-4 w-4"><use href="#i-door" /></svg></span></div>
-            <p class="mt-3 text-3xl font-bold text-[#1a1b22]">3</p><p class="text-xs text-muted">Groupes qui me sont assignés</p>
+            <p class="mt-3 text-3xl font-bold text-[#1a1b22]"><?= $nbClasses ?></p><p class="text-xs text-muted">Groupes qui me sont assignés</p>
           </div>
           <div class="rounded-xl bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between"><span class="text-[11px] font-semibold uppercase tracking-wide text-muted">Mes filières</span><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ffdad7] text-primary"><svg class="h-4 w-4"><use href="#i-tree" /></svg></span></div>
-            <p class="mt-3 text-3xl font-bold text-[#1a1b22]">2</p><p class="text-xs text-muted">Génie Logiciel, Data Science</p>
+            <p class="mt-3 text-3xl font-bold text-[#1a1b22]"><?= $nbFilieres ?></p><p class="truncate text-xs text-muted"><?= htmlspecialchars($listeFilieres ?: '—') ?></p>
           </div>
           <div class="rounded-xl bg-white p-5 shadow-sm">
             <div class="flex items-center justify-between"><span class="text-[11px] font-semibold uppercase tracking-wide text-muted">Mes séances</span><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ffdad7] text-primary"><svg class="h-4 w-4"><use href="#i-calendar" /></svg></span></div>
-            <p class="mt-3 text-3xl font-bold text-[#1a1b22]">12</p><p class="text-xs text-muted">Cours cette semaine</p>
+            <p class="mt-3 text-3xl font-bold text-[#1a1b22]"><?= $nbSeances ?></p><p class="text-xs text-muted">Cours programmés</p>
           </div>
         </div>
 
         <!-- Deux panneaux -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
-          <!-- Mes classes -->
+          <!-- Mes classes (taux de remplissage) -->
           <section class="flex flex-col gap-5 rounded-2xl bg-white p-6 shadow-sm">
             <div>
               <h3 class="text-base font-bold text-[#1a1b22]">Mes classes</h3>
               <p class="text-xs text-muted">Effectifs des groupes qui me sont assignés</p>
             </div>
             <div class="flex flex-col gap-4">
-              <div><div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-semibold text-[#1a1b22]">L3 Génie Logiciel</span><span class="text-sm font-bold text-primary">28 / 40</span></div><div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:70%"></div></div></div>
-              <div><div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-semibold text-[#1a1b22]">M1 Data Science</span><span class="text-sm font-bold text-primary">25 / 40</span></div><div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:62.5%"></div></div></div>
-              <div><div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-semibold text-[#1a1b22]">M2 Intelligence Artificielle</span><span class="text-sm font-bold text-primary">22 / 40</span></div><div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:55%"></div></div></div>
-            </div>
-            <div class="flex items-center gap-3 rounded-xl bg-page p-3.5 text-xs text-muted">
-              <svg class="h-[17px] w-[17px] shrink-0"><use href="#i-info" /></svg>
-              <p>Capacité maximale standard : 40 places par salle</p>
+              <?php if ($nbClasses === 0): ?>
+                <p class="text-sm text-muted">Aucune classe ne vous est assignée pour l'instant.</p>
+              <?php else: ?>
+                <?php foreach ($mesClasses as $c): ?>
+                  <?php $cap = (int)$c['capacite']; $taux = $cap > 0 ? round((int)$c['eff'] / $cap * 100) : 0; ?>
+                  <div>
+                    <div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-semibold text-[#1a1b22]"><?= htmlspecialchars($c['nom_classe']) ?></span><span class="text-sm font-bold text-primary"><?= (int)$c['eff'] ?> / <?= $cap ?></span></div>
+                    <div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:<?= $taux ?>%"></div></div>
+                  </div>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </div>
           </section>
 
@@ -122,13 +174,21 @@ require 'config.php';
               <p class="text-xs text-muted">Par classe que j'encadre</p>
             </div>
             <div class="flex flex-col gap-4">
-              <div><div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-medium text-[#1f2937]">L3 Génie Logiciel</span><span class="font-bold text-[#1a1b22]">28</span></div><div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:100%"></div></div></div>
-              <div><div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-medium text-[#1f2937]">M1 Data Science</span><span class="font-bold text-[#1a1b22]">25</span></div><div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:89%"></div></div></div>
-              <div><div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-medium text-[#1f2937]">M2 Intelligence Artificielle</span><span class="font-bold text-[#1a1b22]">22</span></div><div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:78%"></div></div></div>
+              <?php if ($nbClasses === 0): ?>
+                <p class="text-sm text-muted">Aucun étudiant à afficher.</p>
+              <?php else: ?>
+                <?php foreach ($mesClasses as $c): ?>
+                  <?php $w = round((int)$c['eff'] / $maxEff * 100); ?>
+                  <div>
+                    <div class="mb-1.5 flex items-center justify-between text-sm"><span class="font-medium text-[#1f2937]"><?= htmlspecialchars($c['nom_classe']) ?></span><span class="font-bold text-[#1a1b22]"><?= (int)$c['eff'] ?></span></div>
+                    <div class="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:<?= $w ?>%"></div></div>
+                  </div>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </div>
             <div class="flex items-center gap-2 text-xs text-muted">
               <svg class="h-4 w-4 text-primary"><use href="#i-trend" /></svg>
-              <p>Total : 75 étudiants — consultation en lecture seule</p>
+              <p>Total : <?= $totalEtudiants ?> étudiant<?= $totalEtudiants > 1 ? 's' : '' ?> — consultation en lecture seule</p>
             </div>
           </section>
         </div>

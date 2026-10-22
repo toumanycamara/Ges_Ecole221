@@ -1,12 +1,53 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='formateur') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'formateur') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+$idFormateur = $_SESSION['id_formateur'] ?? 0;
+$jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
+
+// Infos du formateur (en-tête)
+$stmt = $pdo->prepare("SELECT nom, prenom, email, photo FROM formateur WHERE id_formateur = :id");
+$stmt->execute(['id' => $idFormateur]);
+$moi = $stmt->fetch();
+$nomAffiche   = $moi ? trim($moi['prenom'] . ' ' . $moi['nom']) : ($_SESSION['login'] ?? 'Formateur');
+$emailAffiche = $moi && !empty($moi['email']) ? $moi['email'] : ($_SESSION['login'] ?? '');
+$photo        = $moi && !empty($moi['photo']) ? $moi['photo'] : 'https://i.pravatar.cc/64?img=12';
+
+// Mes séances (toutes classes confondues)
+$stmt = $pdo->prepare("
+  SELECT s.id_seance, s.jour, s.heure_debut, s.heure_fin, s.salle,
+         m.nom_matiere, c.nom_classe
+  FROM seance s
+  JOIN matiere m ON m.id_matiere = s.id_matiere
+  JOIN classe  c ON c.id_classe  = s.id_classe
+  WHERE s.id_formateur = :f
+  ORDER BY s.heure_debut
+");
+$stmt->execute(['f' => $idFormateur]);
+$seances = $stmt->fetchAll();
+
+// Rangement par jour + créneau, et total d'heures
+$edt = [];          // $edt[jour][label] = séance
+$creneaux = [];     // label => heure de début (pour le tri)
+$totalMinutes = 0;
+foreach ($seances as $s) {
+  $debut = substr($s['heure_debut'], 0, 5);
+  $fin   = substr($s['heure_fin'], 0, 5);
+  $label = $debut . ' - ' . $fin;
+  $edt[$s['jour']][$label] = $s;
+  if (!isset($creneaux[$label])) $creneaux[$label] = $debut;
+  $totalMinutes += (strtotime("1970-01-01 $fin") - strtotime("1970-01-01 $debut")) / 60;
+}
+asort($creneaux); // tri des créneaux par heure de début
+
+$totalHeures = $totalMinutes / 60;
+$totalAffiche = rtrim(rtrim(number_format($totalHeures, 1, ',', ''), '0'), ',');
+$nbSeances = count($seances);
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -29,7 +70,6 @@ require 'config.php';
 
   <svg class="hidden" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
       <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
     </defs>
   </svg>
@@ -46,8 +86,8 @@ require 'config.php';
       </div>
       <div class="flex items-center gap-3 sm:gap-4">
         <div class="flex items-center gap-2">
-          <img src="https://i.pravatar.cc/64?img=12" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
-          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]">Dr. Mamadou Kane</p><p class="text-xs leading-3 text-muted">m.kane@ecole221.sn</p></div>
+          <img src="<?= htmlspecialchars($photo) ?>" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
+          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p><p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p></div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
         <span class="whitespace-nowrap rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-white shadow-sm">Formateur</span>
@@ -57,147 +97,65 @@ require 'config.php';
     <main class="px-4 py-8 sm:px-6 lg:px-12">
       <div class="mx-auto flex max-w-[1180px] flex-col gap-6">
 
+        <div>
+          <h2 class="text-2xl font-bold leading-8 tracking-[-0.6px] text-[#1a1b22]">Mon emploi du temps</h2>
+          <p class="mt-1 text-xs text-muted">Toutes vos séances de la semaine, telles que programmées par le secrétaire.</p>
+        </div>
+
         <section class="overflow-hidden rounded-2xl bg-white shadow-sm">
 
-          <!-- Barre d'outils -->
-          <div class="flex flex-col gap-4 border-b border-[#ececef] bg-[#faf9fb] px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-            <div class="flex flex-col gap-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted">Période</label>
-              <div class="relative">
-                <select class="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-3 pr-9 text-sm text-[#374151] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:w-64">
-                  <option>Semaine du 28 Sept — 2 Oct 2026</option>
-                  <option>Semaine du 5 — 9 Oct 2026</option>
-                  <option>Semaine du 12 — 16 Oct 2026</option>
-                </select>
-                <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"><svg class="h-4 w-4"><use href="#i-chevron" /></svg></span>
-              </div>
+          <?php if ($nbSeances === 0): ?>
+            <div class="p-10 text-center">
+              <p class="text-sm text-muted">Aucune séance programmée pour l'instant.</p>
+              <p class="mt-1 text-xs text-muted">Vos cours apparaîtront ici dès que le secrétaire les aura ajoutés à l'emploi du temps.</p>
             </div>
-            <div class="inline-flex rounded-lg border border-[#e5e7eb] bg-white p-1 text-sm">
-              <button type="button" class="rounded-md bg-primary px-4 py-1.5 font-semibold text-white shadow-sm">Semaine</button>
-              <button type="button" class="rounded-md px-4 py-1.5 font-medium text-muted transition hover:text-ink">Jour</button>
-            </div>
-          </div>
+          <?php else: ?>
 
           <!-- Grille emploi du temps -->
           <div class="overflow-x-auto">
             <table class="w-full min-w-[860px] table-fixed border-collapse text-left">
               <thead>
                 <tr class="text-[11px] uppercase tracking-wide text-muted">
-                  <th class="w-[92px] border-b border-r border-[#ececef] px-3 py-3 font-semibold">Heure</th>
-                  <th class="border-b border-r border-[#ececef] px-3 py-3 text-center font-semibold">Lundi</th>
-                  <th class="border-b border-r border-[#ececef] px-3 py-3 text-center font-semibold">Mardi</th>
-                  <th class="border-b border-r border-[#ececef] px-3 py-3 text-center font-semibold">Mercredi</th>
-                  <th class="border-b border-r border-[#ececef] px-3 py-3 text-center font-semibold">Jeudi</th>
-                  <th class="border-b border-[#ececef] px-3 py-3 text-center font-semibold">Vendredi</th>
+                  <th class="w-[110px] border-b border-r border-[#ececef] px-3 py-3 font-semibold">Heure</th>
+                  <?php foreach ($jours as $j): ?>
+                    <th class="border-b border-r border-[#ececef] px-3 py-3 text-center font-semibold last:border-r-0"><?= $j ?></th>
+                  <?php endforeach; ?>
                 </tr>
               </thead>
               <tbody class="align-top">
-
-                <!-- 08:00 - 10:00 -->
-                <tr>
-                  <td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">08:00 - 10:00</td>
-                  <td class="h-[120px] border-b border-r border-[#ececef] p-2">
-                    <div class="rounded-xl bg-primary p-3 text-white shadow-sm">
-                      <p class="text-sm font-bold leading-tight">Algorithmique Avancée</p>
-                      <p class="mt-1 text-xs text-white/90">L3 Génie Logiciel</p>
-                      <p class="mt-0.5 text-xs italic text-white/70">Salle A12</p>
-                    </div>
-                  </td>
-                  <td class="border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-r border-[#ececef] p-2">
-                    <div class="rounded-xl bg-primary p-3 text-white shadow-sm">
-                      <p class="text-sm font-bold leading-tight">Algorithmique Avancée</p>
-                      <p class="mt-1 text-xs text-white/90">L3 Génie Logiciel</p>
-                      <p class="mt-0.5 text-xs italic text-white/70">Salle A12</p>
-                    </div>
-                  </td>
-                  <td class="border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-[#ececef] p-2"></td>
-                </tr>
-
-                <!-- 10:00 - 12:00 -->
-                <tr>
-                  <td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">10:00 - 12:00</td>
-                  <td class="h-[120px] border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-r border-[#ececef] p-2">
-                    <div class="rounded-xl bg-[#fdeaec] p-3 ring-1 ring-primary/15">
-                      <p class="text-sm font-bold leading-tight text-primary">Base de Données</p>
-                      <p class="mt-1 text-xs text-[#374151]">M1 Data Science</p>
-                      <p class="mt-0.5 text-xs italic text-muted">Salle C09</p>
-                    </div>
-                  </td>
-                  <td class="border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-[#ececef] p-2">
-                    <div class="rounded-xl bg-[#fdeaec] p-3 ring-1 ring-primary/15">
-                      <p class="text-sm font-bold leading-tight text-primary">Réseaux Informatiques</p>
-                      <p class="mt-1 text-xs text-[#374151]">L1 Réseaux</p>
-                      <p class="mt-0.5 text-xs italic text-muted">Salle D03</p>
-                    </div>
-                  </td>
-                </tr>
-
-                <!-- 12:00 - 14:00 : Pause -->
-                <tr>
-                  <td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">12:00 - 14:00</td>
-                  <td colspan="5" class="border-b border-[#ececef] bg-[#fafafa] px-3 py-5 text-center text-xs font-semibold uppercase tracking-wide text-muted">Pause déjeuner</td>
-                </tr>
-
-                <!-- 14:00 - 16:00 -->
-                <tr>
-                  <td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">14:00 - 16:00</td>
-                  <td class="h-[120px] border-b border-r border-[#ececef] p-2">
-                    <div class="rounded-xl bg-primary p-3 text-white shadow-sm">
-                      <p class="text-sm font-bold leading-tight">Structures de Données</p>
-                      <p class="mt-1 text-xs text-white/90">L2 Informatique</p>
-                      <p class="mt-0.5 text-xs italic text-white/70">Salle B05</p>
-                    </div>
-                  </td>
-                  <td class="border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-r border-[#ececef] p-2">
-                    <div class="rounded-xl bg-primary p-3 text-white shadow-sm">
-                      <p class="text-sm font-bold leading-tight">TP Programmation</p>
-                      <p class="mt-1 text-xs text-white/90">L3 Génie Logiciel</p>
-                      <p class="mt-0.5 text-xs italic text-white/70">Labo Info 2</p>
-                    </div>
-                  </td>
-                  <td class="border-b border-r border-[#ececef] p-2"></td>
-                  <td class="border-b border-[#ececef] p-2"></td>
-                </tr>
-
-                <!-- 16:00 - 17:00 -->
-                <tr>
-                  <td class="border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted">16:00 - 17:00</td>
-                  <td class="h-[110px] border-r border-[#ececef] p-2"></td>
-                  <td class="border-r border-[#ececef] p-2"></td>
-                  <td class="border-r border-[#ececef] p-2">
-                    <div class="rounded-xl bg-primary p-3 text-white shadow-sm">
-                      <p class="text-sm font-bold leading-tight">TP Programmation</p>
-                      <p class="mt-1 text-xs text-white/90">L3 Génie Logiciel</p>
-                      <p class="mt-0.5 text-xs italic text-white/70">Labo Info 2</p>
-                    </div>
-                  </td>
-                  <td class="border-r border-[#ececef] p-2"></td>
-                  <td class="p-2"></td>
-                </tr>
-
+                <?php foreach ($creneaux as $label => $debut): ?>
+                  <tr>
+                    <td class="border-b border-r border-[#ececef] px-3 py-3 text-xs font-medium text-muted"><?= htmlspecialchars($label) ?></td>
+                    <?php foreach ($jours as $j): ?>
+                      <td class="h-[120px] border-b border-r border-[#ececef] p-2 last:border-r-0">
+                        <?php if (isset($edt[$j][$label])): $s = $edt[$j][$label]; ?>
+                          <div class="rounded-xl bg-primary p-3 text-white shadow-sm">
+                            <p class="text-sm font-bold leading-tight"><?= htmlspecialchars($s['nom_matiere']) ?></p>
+                            <p class="mt-1 text-xs text-white/90"><?= htmlspecialchars($s['nom_classe']) ?></p>
+                            <?php if (!empty($s['salle'])): ?><p class="mt-0.5 text-xs italic text-white/70">Salle <?= htmlspecialchars($s['salle']) ?></p><?php endif; ?>
+                          </div>
+                        <?php endif; ?>
+                      </td>
+                    <?php endforeach; ?>
+                  </tr>
+                <?php endforeach; ?>
               </tbody>
             </table>
           </div>
 
           <!-- Barre de synthèse -->
           <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-[#ececef] bg-[#fdf2f3] px-5 py-3.5 text-sm sm:px-6">
-            <span class="inline-flex items-center gap-1.5 font-semibold text-[#1a1b22]"><svg class="h-4 w-4 text-primary"><use href="#i-clock" /></svg> Total : <span class="text-primary">16 heures / semaine</span></span>
-            <span class="text-muted">Prochaine séance : <span class="font-semibold text-[#1a1b22]">Lundi 08:00 — Algorithmique Avancée</span></span>
+            <span class="inline-flex items-center gap-1.5 font-semibold text-[#1a1b22]"><svg class="h-4 w-4 text-primary"><use href="#i-clock" /></svg> Total : <span class="text-primary"><?= $totalAffiche ?> heures / semaine</span></span>
+            <span class="text-muted">Nombre de séances : <span class="font-semibold text-[#1a1b22]"><?= $nbSeances ?></span></span>
           </div>
 
+          <?php endif; ?>
         </section>
       </div>
     </main>
   </div>
 
   <script>
-    /* ----- Menu mobile ----- */
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
     const toggleMenu = (open) => { sidebar.classList.toggle('-translate-x-full', !open); overlay.classList.toggle('hidden', !open); document.body.classList.toggle('overflow-hidden', open); };

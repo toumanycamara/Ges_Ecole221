@@ -1,12 +1,65 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='formateur') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'formateur') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+$idFormateur = $_SESSION['id_formateur'] ?? 0;
+$idClasse    = $_GET['id'] ?? 0;
+
+// Sécurité : le formateur ne peut voir que les classes où il a une séance
+$chk = $pdo->prepare("SELECT 1 FROM seance WHERE id_formateur = :f AND id_classe = :c LIMIT 1");
+$chk->execute(['f' => $idFormateur, 'c' => $idClasse]);
+if (!$chk->fetchColumn()) {
+  header('Location: classeFormateur.php');
+  exit;
+}
+
+// Infos du formateur connecté (en-tête)
+$stmt = $pdo->prepare("SELECT nom, prenom, email, photo FROM formateur WHERE id_formateur = :id");
+$stmt->execute(['id' => $idFormateur]);
+$moi = $stmt->fetch();
+$nomAffiche   = $moi ? trim($moi['prenom'] . ' ' . $moi['nom']) : ($_SESSION['login'] ?? 'Formateur');
+$emailAffiche = $moi && !empty($moi['email']) ? $moi['email'] : ($_SESSION['login'] ?? '');
+$photo        = $moi && !empty($moi['photo']) ? $moi['photo'] : 'https://i.pravatar.cc/64?img=12';
+
+// Infos de la classe
+$stmt = $pdo->prepare("
+  SELECT c.*, f.nom_filiere, n.libelle_niveau
+  FROM classe c
+  JOIN filiere f ON f.id_filiere = c.id_filiere
+  JOIN niveau  n ON n.id_niveau  = c.id_niveau
+  WHERE c.id_classe = :id
+");
+$stmt->execute(['id' => $idClasse]);
+$classe = $stmt->fetch();
+if (!$classe) {
+  header('Location: classeFormateur.php');
+  exit;
+}
+
+// Étudiants de la classe
+$stmt = $pdo->prepare("SELECT id_etudiant, matricule, nom, prenom, sexe FROM etudiant WHERE id_classe = :id ORDER BY nom, prenom");
+$stmt->execute(['id' => $idClasse]);
+$etudiants = $stmt->fetchAll();
+
+// Calculs
+$nbTotal = count($etudiants);
+$nbG = 0; $nbF = 0;
+foreach ($etudiants as $e) {
+  if ($e['sexe'] === 'M') $nbG++;
+  elseif ($e['sexe'] === 'F') $nbF++;
+}
+$cap  = (int)$classe['capacite'];
+$taux = $cap > 0 ? round(100 * $nbTotal / $cap) : 0;
+
+function sexeBadge($s) {
+  if ($s === 'F') return '<span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span>';
+  return '<span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -46,8 +99,8 @@ require 'config.php';
       </div>
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <img src="https://i.pravatar.cc/64?img=12" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
-          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]">Dr. Mamadou Kane</p><p class="text-xs leading-3 text-muted">m.kane@ecole221.sn</p></div>
+          <img src="<?= htmlspecialchars($photo) ?>" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
+          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p><p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p></div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
         <span class="whitespace-nowrap rounded-full bg-primary px-2 py-1 text-xs font-semibold text-white shadow-sm">Formateur</span>
@@ -68,9 +121,9 @@ require 'config.php';
 
         <!-- Titre -->
         <div class="flex flex-wrap items-center gap-3">
-          <h1 class="text-2xl font-bold tracking-[-0.6px] text-[#1a1b22]">L3 Génie Logiciel</h1>
-          <span class="rounded-full bg-page px-2.5 py-1 text-xs font-semibold text-[#374151]">Salle A2</span>
-          <span class="rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">Année 2025-2026</span>
+          <h1 class="text-2xl font-bold tracking-[-0.6px] text-[#1a1b22]"><?= htmlspecialchars($classe['nom_classe']) ?></h1>
+          <?php if (!empty($classe['salle'])): ?><span class="rounded-full bg-page px-2.5 py-1 text-xs font-semibold text-[#374151]">Salle <?= htmlspecialchars($classe['salle']) ?></span><?php endif; ?>
+          <?php if (!empty($classe['annee_academique'])): ?><span class="rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">Année <?= htmlspecialchars($classe['annee_academique']) ?></span><?php endif; ?>
           <span class="rounded-full bg-page px-2.5 py-1 text-xs font-medium text-muted">Consultation</span>
         </div>
 
@@ -79,16 +132,15 @@ require 'config.php';
           <section class="rounded-2xl bg-white p-6 shadow-sm">
             <h2 class="mb-4 text-lg font-bold text-[#1a1b22]">Informations de la classe</h2>
             <dl class="divide-y divide-[#f3f4f6] text-sm">
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Filière</dt><dd class="font-medium text-[#1f2937]">Génie Logiciel</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Niveau</dt><dd class="font-medium text-[#1f2937]">Licence 3</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Salle</dt><dd class="font-medium text-[#1f2937]">A2</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Capacité</dt><dd class="font-medium text-[#1f2937]">40 places</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Inscrits</dt><dd class="font-medium text-[#1f2937]">28 étudiants</dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Filière</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['nom_filiere']) ?></dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Niveau</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['libelle_niveau']) ?></dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Salle</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['salle'] ?? '') ?></dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Capacité</dt><dd class="font-medium text-[#1f2937]"><?= htmlspecialchars($classe['capacite']) ?> places</dd></div>
+              <div class="flex justify-between py-2.5"><dt class="text-muted">Inscrits</dt><dd class="font-medium text-[#1f2937]"><?= $nbTotal ?> étudiant<?= $nbTotal > 1 ? 's' : '' ?></dd></div>
               <div class="flex items-center justify-between py-2.5">
                 <dt class="text-muted">Taux de remplissage</dt>
-                <dd class="flex items-center gap-2"><span class="h-2 w-24 overflow-hidden rounded-full bg-[#f3f4f6]"><span class="block h-full rounded-full bg-primary" style="width:70%"></span></span><span class="text-sm font-semibold text-primary">70%</span></dd>
+                <dd class="flex items-center gap-2"><span class="h-2 w-24 overflow-hidden rounded-full bg-[#f3f4f6]"><span class="block h-full rounded-full bg-primary" style="width:<?= $taux ?>%"></span></span><span class="text-sm font-semibold text-primary"><?= $taux ?>%</span></dd>
               </div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Formateur principal</dt><dd class="font-semibold text-[#1f2937]">Dr. Mamadou Kane</dd></div>
             </dl>
           </section>
 
@@ -97,14 +149,14 @@ require 'config.php';
             <div class="flex flex-1 items-center justify-center gap-12">
               <div class="flex flex-col items-center gap-2">
                 <div class="flex h-20 w-20 items-center justify-center rounded-full border-[7px] border-[#2563eb] text-[#2563eb]"><svg class="h-8 w-8"><use href="#i-male" /></svg></div>
-                <p class="text-sm text-muted">Garçons : <span class="font-semibold text-[#1f2937]">18</span></p>
+                <p class="text-sm text-muted">Garçons : <span class="font-semibold text-[#1f2937]"><?= $nbG ?></span></p>
               </div>
               <div class="flex flex-col items-center gap-2">
                 <div class="flex h-20 w-20 items-center justify-center rounded-full border-[7px] border-[#db2777] text-[#db2777]"><svg class="h-8 w-8"><use href="#i-female" /></svg></div>
-                <p class="text-sm text-muted">Filles : <span class="font-semibold text-[#1f2937]">10</span></p>
+                <p class="text-sm text-muted">Filles : <span class="font-semibold text-[#1f2937]"><?= $nbF ?></span></p>
               </div>
             </div>
-            <div class="mt-4 rounded-xl bg-[#ffdad7] px-4 py-3 text-center text-sm font-semibold text-primary">Moyenne générale de la classe : 13.2 / 20</div>
+            <div class="mt-4 rounded-xl bg-[#ffdad7] px-4 py-3 text-center text-sm font-semibold text-primary">Effectif total : <?= $nbTotal ?> étudiant<?= $nbTotal > 1 ? 's' : '' ?></div>
           </section>
         </div>
 
@@ -115,19 +167,27 @@ require 'config.php';
             <table class="w-full min-w-[640px] text-left text-sm">
               <thead class="border-b border-[#e5e7eb] bg-[#f9fafb]">
                 <tr class="text-xs font-semibold uppercase tracking-[0.5px] text-[#6b7280]">
-                  <th class="px-4 py-3 font-semibold">N°</th><th class="px-4 py-3 font-semibold">Matricule</th><th class="px-4 py-3 font-semibold">Nom</th><th class="px-4 py-3 font-semibold">Prénom</th><th class="px-4 py-3 font-semibold">Sexe</th><th class="px-4 py-3 font-semibold">Moyenne</th>
+                  <th class="px-4 py-3 font-semibold">N°</th><th class="px-4 py-3 font-semibold">Matricule</th><th class="px-4 py-3 font-semibold">Nom</th><th class="px-4 py-3 font-semibold">Prénom</th><th class="px-4 py-3 font-semibold">Sexe</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#f3f4f6]">
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">1</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0045</td><td class="px-4 py-3 font-bold">Camara</td><td class="px-4 py-3 text-[#374151]">Toumany</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">14.5 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">2</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0046</td><td class="px-4 py-3 font-bold">Sy</td><td class="px-4 py-3 text-[#374151]">Fatou</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">16.2 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">3</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0047</td><td class="px-4 py-3 font-bold">Diallo</td><td class="px-4 py-3 text-[#374151]">Abdoulaye</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">12.8 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">4</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0048</td><td class="px-4 py-3 font-bold">Ndiaye</td><td class="px-4 py-3 text-[#374151]">Aminata</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">11.0 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">5</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0049</td><td class="px-4 py-3 font-bold">Ba</td><td class="px-4 py-3 text-[#374151]">Ibrahima</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">15.3 / 20</td></tr>
+                <?php if ($nbTotal === 0): ?>
+                  <tr><td colspan="5" class="px-4 py-10 text-center text-sm text-muted">Aucun étudiant inscrit dans cette classe pour l'instant.</td></tr>
+                <?php else: ?>
+                  <?php foreach ($etudiants as $i => $e): ?>
+                  <tr class="hover:bg-[#f9fafb]">
+                    <td class="px-4 py-3 text-muted"><?= $i + 1 ?></td>
+                    <td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]"><?= htmlspecialchars($e['matricule']) ?></td>
+                    <td class="px-4 py-3 font-bold"><?= htmlspecialchars($e['nom']) ?></td>
+                    <td class="px-4 py-3 text-[#374151]"><?= htmlspecialchars($e['prenom']) ?></td>
+                    <td class="px-4 py-3"><?= sexeBadge($e['sexe']) ?></td>
+                  </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
               </tbody>
             </table>
           </div>
-          <p class="mt-4 text-xs text-muted">Affichage de 1 à 5 sur 28 étudiants — consultation en lecture seule</p>
+          <p class="mt-4 text-xs text-muted"><?= $nbTotal ?> étudiant<?= $nbTotal > 1 ? 's' : '' ?> — consultation en lecture seule</p>
         </section>
       </div>
     </main>

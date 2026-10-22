@@ -1,12 +1,71 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='formateur') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'formateur') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+$idFormateur = $_SESSION['id_formateur'] ?? 0;
+
+// Infos du formateur connecté (en-tête)
+$stmt = $pdo->prepare("SELECT nom, prenom, email, photo FROM formateur WHERE id_formateur = :id");
+$stmt->execute(['id' => $idFormateur]);
+$moi = $stmt->fetch();
+$nomAffiche   = $moi ? trim($moi['prenom'] . ' ' . $moi['nom']) : ($_SESSION['login'] ?? 'Formateur');
+$emailAffiche = $moi && !empty($moi['email']) ? $moi['email'] : ($_SESSION['login'] ?? '');
+$photo        = $moi && !empty($moi['photo']) ? $moi['photo'] : 'https://i.pravatar.cc/64?img=12';
+
+// Recherche + filtres
+$q         = trim($_GET['q'] ?? '');
+$filFil    = $_GET['filiere'] ?? '';
+$filClasse = $_GET['classe'] ?? '';
+
+// Étudiants des classes où le formateur a des séances
+$stmt = $pdo->prepare("
+  SELECT e.id_etudiant, e.matricule, e.nom, e.prenom, e.sexe,
+         c.nom_classe, f.nom_filiere, c.id_classe, f.id_filiere
+  FROM etudiant e
+  JOIN classe  c ON c.id_classe  = e.id_classe
+  JOIN filiere f ON f.id_filiere = c.id_filiere
+  WHERE c.id_classe IN (SELECT DISTINCT id_classe FROM seance WHERE id_formateur = :f)
+    AND (:q1 = '' OR e.nom LIKE CONCAT('%', :q2, '%') OR e.prenom LIKE CONCAT('%', :q3, '%') OR e.matricule LIKE CONCAT('%', :q4, '%'))
+    AND (:fil1 = '' OR f.id_filiere = :fil2)
+    AND (:cl1  = '' OR c.id_classe  = :cl2)
+  ORDER BY e.nom, e.prenom
+");
+$stmt->execute([
+  'f' => $idFormateur,
+  'q1' => $q, 'q2' => $q, 'q3' => $q, 'q4' => $q,
+  'fil1' => $filFil, 'fil2' => $filFil,
+  'cl1' => $filClasse, 'cl2' => $filClasse,
+]);
+$etudiants = $stmt->fetchAll();
+
+// Listes pour les filtres (classes et filières du formateur)
+$mesClassesListe = $pdo->prepare("
+  SELECT DISTINCT c.id_classe, c.nom_classe
+  FROM seance s JOIN classe c ON c.id_classe = s.id_classe
+  WHERE s.id_formateur = :f ORDER BY c.nom_classe
+");
+$mesClassesListe->execute(['f' => $idFormateur]);
+$mesClassesListe = $mesClassesListe->fetchAll();
+
+$mesFilieresListe = $pdo->prepare("
+  SELECT DISTINCT f.id_filiere, f.nom_filiere
+  FROM seance s
+  JOIN classe  c ON c.id_classe  = s.id_classe
+  JOIN filiere f ON f.id_filiere = c.id_filiere
+  WHERE s.id_formateur = :f ORDER BY f.nom_filiere
+");
+$mesFilieresListe->execute(['f' => $idFormateur]);
+$mesFilieresListe = $mesFilieresListe->fetchAll();
+
+function sexeBadge($s) {
+  if ($s === 'F') return '<span class="inline-block rounded-full bg-[#fce7f3] px-2.5 py-0.5 text-xs font-semibold text-[#db2777]">Féminin</span>';
+  return '<span class="inline-block rounded-full bg-[#dbeafe] px-2.5 py-0.5 text-xs font-semibold text-[#2563eb]">Masculin</span>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -46,8 +105,8 @@ require 'config.php';
       </div>
       <div class="flex items-center gap-3 sm:gap-4">
         <div class="flex items-center gap-2">
-          <img src="https://i.pravatar.cc/64?img=12" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
-          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]">Dr. Mamadou Kane</p><p class="text-xs leading-3 text-muted">m.kane@ecole221.sn</p></div>
+          <img src="<?= htmlspecialchars($photo) ?>" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
+          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p><p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p></div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
         <span class="whitespace-nowrap rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-white shadow-sm">Formateur</span>
@@ -70,24 +129,31 @@ require 'config.php';
         <section class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
 
           <!-- Barre de recherche + filtres -->
-          <div class="flex flex-col gap-3 md:flex-row md:items-center">
+          <form method="get" class="flex flex-col gap-3 md:flex-row md:items-center">
             <div class="relative flex-1">
               <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"><svg class="h-4 w-4"><use href="#i-search" /></svg></span>
-              <input id="search" type="text" placeholder="Rechercher un étudiant" class="w-full rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input id="search" name="q" value="<?= htmlspecialchars($q) ?>" type="text" placeholder="Rechercher un étudiant" class="w-full rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
             </div>
             <div class="relative">
-              <select id="filterFiliere" class="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-3 pr-9 text-sm text-[#374151] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 md:w-48">
+              <select name="filiere" onchange="this.form.submit()" class="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-3 pr-9 text-sm text-[#374151] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 md:w-48">
                 <option value="">Filière : Toutes</option>
+                <?php foreach ($mesFilieresListe as $fl): ?>
+                  <option value="<?= $fl['id_filiere'] ?>" <?= $filFil == $fl['id_filiere'] ? 'selected' : '' ?>><?= htmlspecialchars($fl['nom_filiere']) ?></option>
+                <?php endforeach; ?>
               </select>
               <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"><svg class="h-4 w-4"><use href="#i-chevron" /></svg></span>
             </div>
             <div class="relative">
-              <select id="filterClasse" class="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-3 pr-9 text-sm text-[#374151] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 md:w-48">
+              <select name="classe" onchange="this.form.submit()" class="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white py-2.5 pl-3 pr-9 text-sm text-[#374151] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 md:w-48">
                 <option value="">Classe : Toutes</option>
+                <?php foreach ($mesClassesListe as $cl): ?>
+                  <option value="<?= $cl['id_classe'] ?>" <?= $filClasse == $cl['id_classe'] ? 'selected' : '' ?>><?= htmlspecialchars($cl['nom_classe']) ?></option>
+                <?php endforeach; ?>
               </select>
               <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"><svg class="h-4 w-4"><use href="#i-chevron" /></svg></span>
             </div>
-          </div>
+            <button type="submit" class="rounded-lg border border-[#e5e7eb] p-2.5 text-muted hover:bg-page" aria-label="Rechercher"><svg class="h-4 w-4"><use href="#i-search" /></svg></button>
+          </form>
 
           <!-- Tableau -->
           <div class="mt-5 overflow-x-auto">
@@ -102,13 +168,28 @@ require 'config.php';
                   <th class="px-3 py-3 font-semibold">Filière</th>
                 </tr>
               </thead>
-              <tbody id="tbody" class="divide-y divide-[#f1f1f3]"></tbody>
+              <tbody class="divide-y divide-[#f1f1f3]">
+                <?php if (count($etudiants) === 0): ?>
+                  <tr><td colspan="6" class="px-3 py-10 text-center text-sm text-muted">Aucun étudiant ne correspond à votre recherche.</td></tr>
+                <?php else: ?>
+                  <?php foreach ($etudiants as $e): ?>
+                  <tr class="transition hover:bg-[#faf9fb]">
+                    <td class="px-3 py-3.5 font-mono text-xs text-[#374151]"><?= htmlspecialchars($e['matricule']) ?></td>
+                    <td class="px-3 py-3.5 font-semibold text-[#1a1b22]"><?= htmlspecialchars($e['nom']) ?></td>
+                    <td class="px-3 py-3.5 text-[#374151]"><?= htmlspecialchars($e['prenom']) ?></td>
+                    <td class="px-3 py-3.5"><?= sexeBadge($e['sexe']) ?></td>
+                    <td class="px-3 py-3.5 text-[#374151]"><?= htmlspecialchars($e['nom_classe']) ?></td>
+                    <td class="px-3 py-3.5 text-[#374151]"><?= htmlspecialchars($e['nom_filiere']) ?></td>
+                  </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
             </table>
           </div>
 
           <!-- Pied -->
           <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-            <p id="count">—</p>
+            <p><?= count($etudiants) ?> étudiant<?= count($etudiants) > 1 ? 's' : '' ?> affiché<?= count($etudiants) > 1 ? 's' : '' ?></p>
             <p>Consultation en lecture seule</p>
           </div>
 
@@ -118,76 +199,12 @@ require 'config.php';
   </div>
 
   <script>
-    /* ----- Menu mobile ----- */
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
     const toggleMenu = (open) => { sidebar.classList.toggle('-translate-x-full', !open); overlay.classList.toggle('hidden', !open); document.body.classList.toggle('overflow-hidden', open); };
     document.getElementById('openMenu').addEventListener('click', () => toggleMenu(true));
     document.getElementById('closeMenu').addEventListener('click', () => toggleMenu(false));
     overlay.addEventListener('click', () => toggleMenu(false));
-
-    /* ----- Données (étudiants des classes du formateur) ----- */
-    const etudiants = [
-      { matricule: '221-SN-2024-0045', nom: 'Camara', prenom: 'Toumany',   sexe: 'Masculin', classe: 'L3 Génie Logiciel', filiere: 'Génie Logiciel' },
-      { matricule: '221-SN-2024-0046', nom: 'Sy',     prenom: 'Fatou',     sexe: 'Féminin',  classe: 'L3 Génie Logiciel', filiere: 'Génie Logiciel' },
-      { matricule: '221-SN-2024-0047', nom: 'Diallo', prenom: 'Abdoulaye', sexe: 'Masculin', classe: 'M1 Data Science',   filiere: 'Data Science' },
-      { matricule: '221-SN-2024-0048', nom: 'Ndiaye', prenom: 'Aminata',   sexe: 'Féminin',  classe: 'L2 Informatique',   filiere: 'Informatique' },
-      { matricule: '221-SN-2024-0049', nom: 'Ba',     prenom: 'Ibrahima',  sexe: 'Masculin', classe: 'L1 Tronc Commun',   filiere: 'Tronc Commun' },
-      { matricule: '221-SN-2024-0050', nom: 'Diop',   prenom: 'Mariama',   sexe: 'Féminin',  classe: 'M2 Cybersécurité',  filiere: 'Cybersécurité' },
-      { matricule: '221-SN-2024-0051', nom: 'Fall',   prenom: 'Ousmane',   sexe: 'Masculin', classe: 'L1 Réseaux',        filiere: 'Réseaux' },
-      { matricule: '221-SN-2024-0052', nom: 'Mbodji', prenom: 'Anta',      sexe: 'Féminin',  classe: 'L3 Génie Logiciel', filiere: 'Génie Logiciel' },
-    ];
-
-    const tbody = document.getElementById('tbody');
-    const countEl = document.getElementById('count');
-    const search = document.getElementById('search');
-    const filterFiliere = document.getElementById('filterFiliere');
-    const filterClasse = document.getElementById('filterClasse');
-
-    /* Remplir les listes déroulantes à partir des données */
-    [...new Set(etudiants.map((e) => e.filiere))].sort().forEach((f) => {
-      const o = document.createElement('option'); o.value = f; o.textContent = f; filterFiliere.appendChild(o);
-    });
-    [...new Set(etudiants.map((e) => e.classe))].sort().forEach((c) => {
-      const o = document.createElement('option'); o.value = c; o.textContent = c; filterClasse.appendChild(o);
-    });
-
-    const sexeBadge = (sexe) =>
-      sexe === 'Féminin'
-        ? '<span class="inline-block rounded-full bg-[#fce7f3] px-2.5 py-0.5 text-xs font-semibold text-[#db2777]">Féminin</span>'
-        : '<span class="inline-block rounded-full bg-[#dbeafe] px-2.5 py-0.5 text-xs font-semibold text-[#2563eb]">Masculin</span>';
-
-    function render() {
-      const q = search.value.trim().toLowerCase();
-      const fFil = filterFiliere.value;
-      const fCla = filterClasse.value;
-
-      const lignes = etudiants.filter((e) => {
-        const okTxt = !q || (e.matricule + ' ' + e.nom + ' ' + e.prenom).toLowerCase().includes(q);
-        const okFil = !fFil || e.filiere === fFil;
-        const okCla = !fCla || e.classe === fCla;
-        return okTxt && okFil && okCla;
-      });
-
-      tbody.innerHTML = lignes.length
-        ? lignes.map((e) => `
-          <tr class="transition hover:bg-[#faf9fb]">
-            <td class="px-3 py-3.5 font-mono text-xs text-[#374151]">${e.matricule}</td>
-            <td class="px-3 py-3.5 font-semibold text-[#1a1b22]">${e.nom}</td>
-            <td class="px-3 py-3.5 text-[#374151]">${e.prenom}</td>
-            <td class="px-3 py-3.5">${sexeBadge(e.sexe)}</td>
-            <td class="px-3 py-3.5 text-[#374151]">${e.classe}</td>
-            <td class="px-3 py-3.5 text-[#374151]">${e.filiere}</td>
-          </tr>`).join('')
-        : `<tr><td colspan="6" class="px-3 py-10 text-center text-sm text-muted">Aucun étudiant ne correspond à votre recherche.</td></tr>`;
-
-      countEl.textContent = `${lignes.length} étudiant${lignes.length > 1 ? 's' : ''} affiché${lignes.length > 1 ? 's' : ''}`;
-    }
-
-    search.addEventListener('input', render);
-    filterFiliere.addEventListener('change', render);
-    filterClasse.addEventListener('change', render);
-    render();
   </script>
 </body>
 </html>

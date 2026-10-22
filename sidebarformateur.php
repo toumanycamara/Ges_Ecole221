@@ -4,7 +4,7 @@
   --------------------------------------------
   À utiliser avec :  <?php $active = 'notes'; include 'sidebarFormateur.php'; ?>
   Valeurs possibles pour $active :
-    dashboard | etudiants | notes | presences | edt
+    dashboard | classes | etudiants | notes | presences | edt
 
   ATTENTION : vérifie que les noms de fichiers (href) correspondent bien
   aux tiens. Corrige-les ici si besoin, une seule fois.
@@ -18,6 +18,7 @@ function lienF($cle, $active, $base, $on) { return $active === $cle ? $on : $bas
 <svg class="hidden" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <symbol id="sb-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+    <symbol id="sb-door" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M3 21h18M14 12v.01"/></symbol>
     <symbol id="sb-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
     <symbol id="sb-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
     <symbol id="sb-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -57,6 +58,7 @@ function lienF($cle, $active, $base, $on) { return $active === $cle ? $on : $bas
 
     <nav class="mt-1 flex flex-col gap-2 px-4 pt-4 text-sm font-medium text-white">
       <a href="accueilFormateur.php" class="<?= lienF('dashboard', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-grid" /></svg> <span class="label">Tableau de bord</span></a>
+      <a href="classeFormateur.php" class="<?= lienF('classes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-door" /></svg> <span class="label">Classes</span></a>
       <a href="etudiantFormateur.php" class="<?= lienF('etudiants', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-user" /></svg> <span class="label">Étudiants</span></a>
       <a href="noteFormateur.php" class="<?= lienF('notes', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-edit" /></svg> <span class="label">Notes</span></a>
       <a href="presenceFormateur.php" class="<?= lienF('presences', $active, $base, $on) ?>"><svg class="h-4 w-4 shrink-0"><use href="#sb-check" /></svg> <span class="label">Présences</span></a>

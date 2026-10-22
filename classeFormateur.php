@@ -1,19 +1,45 @@
 <?php
 session_start();
-if (!isset ($_SESSION['role'])||$_SESSION['role']!=='formateur') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'formateur') {
   header('Location: loginEcole221.php');
   exit;
 }
 
 require 'config.php';
 
+$idFormateur = $_SESSION['id_formateur'] ?? 0;
+
+// Infos du formateur connecté (en-tête)
+$stmt = $pdo->prepare("SELECT nom, prenom, email, photo FROM formateur WHERE id_formateur = :id");
+$stmt->execute(['id' => $idFormateur]);
+$moi = $stmt->fetch();
+$nomAffiche   = $moi ? trim($moi['prenom'] . ' ' . $moi['nom']) : ($_SESSION['login'] ?? 'Formateur');
+$emailAffiche = $moi && !empty($moi['email']) ? $moi['email'] : ($_SESSION['login'] ?? '');
+$photo        = $moi && !empty($moi['photo']) ? $moi['photo'] : 'https://i.pravatar.cc/64?img=12';
+
+// Mes classes (celles où j'ai des séances)
+$stmt = $pdo->prepare("
+  SELECT c.id_classe, c.nom_classe, c.salle, c.capacite,
+         f.nom_filiere, n.libelle_niveau,
+         COUNT(DISTINCT e.id_etudiant) AS eff
+  FROM seance s
+  JOIN classe  c ON c.id_classe  = s.id_classe
+  JOIN filiere f ON f.id_filiere = c.id_filiere
+  JOIN niveau  n ON n.id_niveau  = c.id_niveau
+  LEFT JOIN etudiant e ON e.id_classe = c.id_classe
+  WHERE s.id_formateur = :id
+  GROUP BY c.id_classe, c.nom_classe, c.salle, c.capacite, f.nom_filiere, n.libelle_niveau
+  ORDER BY c.nom_classe
+");
+$stmt->execute(['id' => $idFormateur]);
+$mesClasses = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>École 221 – Détail classe (Formateur)</title>
+  <title>École 221 – Mes classes (Formateur)</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script>
@@ -29,9 +55,8 @@ require 'config.php';
 
   <svg class="hidden" xmlns="http://www.w3.org/2000/svg">
     <defs>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
       <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
-      <symbol id="i-male" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="14" r="6"/><path d="M19 5l-6 6M15 5h4v4"/></symbol>
-      <symbol id="i-female" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M12 14v7M9 18h6"/></symbol>
     </defs>
   </svg>
 
@@ -42,12 +67,12 @@ require 'config.php';
     <header class="sticky top-0 z-10 flex h-[100px] items-center justify-between gap-4 bg-white px-4 shadow-sm sm:px-6 lg:px-12">
       <div class="flex items-center gap-3">
         <button id="openMenu" type="button" aria-label="Ouvrir le menu" class="rounded-lg p-2 text-ink hover:bg-primarydark hover:text-white lg:hidden"><svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-        <h2 class="text-sm font-semibold">Détail de la classe - Formateur</h2>
+        <h2 class="text-sm font-semibold">Mes classes - Formateur</h2>
       </div>
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <img src="https://i.pravatar.cc/64?img=12" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
-          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]">Dr. Mamadou Kane</p><p class="text-xs leading-3 text-muted">m.kane@ecole221.sn</p></div>
+          <img src="<?= htmlspecialchars($photo) ?>" alt="Photo" class="h-8 w-8 rounded-full object-cover" />
+          <div class="hidden sm:block"><p class="text-sm font-semibold leading-[17.5px]"><?= htmlspecialchars($nomAffiche) ?></p><p class="text-xs leading-3 text-muted"><?= htmlspecialchars($emailAffiche) ?></p></div>
         </div>
         <span class="hidden h-6 w-px bg-[#e3e1ec] sm:block"></span>
         <span class="whitespace-nowrap rounded-full bg-primary px-2 py-1 text-xs font-semibold text-white shadow-sm">Formateur</span>
@@ -57,77 +82,45 @@ require 'config.php';
     <main class="px-4 py-8 sm:px-6 lg:px-12">
       <div class="mx-auto flex max-w-[1180px] flex-col gap-6">
 
-        <!-- Fil d'ariane + retour -->
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <nav class="flex items-center gap-1.5 text-xs text-muted">
-            <a href="classeFormateur.php" class="hover:text-ink">Classes</a><svg class="h-3.5 w-3.5"><use href="#i-chevron-right" /></svg>
-            <span class="font-semibold text-primary">Détail de la classe</span>
-          </nav>
-          <a href="classeFormateur.php" class="text-sm font-medium text-primary hover:underline">← Retour à mes classes</a>
+        <!-- En-tête -->
+        <div>
+          <h1 class="text-2xl font-bold leading-8 tracking-[-0.6px] text-[#1a1b22]">Mes classes</h1>
+          <p class="mt-1 text-xs text-muted">Les groupes où vous avez des cours — cliquez pour voir le détail</p>
         </div>
 
-        <!-- Titre -->
-        <div class="flex flex-wrap items-center gap-3">
-          <h1 class="text-2xl font-bold tracking-[-0.6px] text-[#1a1b22]">L3 Génie Logiciel</h1>
-          <span class="rounded-full bg-page px-2.5 py-1 text-xs font-semibold text-[#374151]">Salle A2</span>
-          <span class="rounded-full bg-[#ffdad7] px-2.5 py-1 text-xs font-semibold text-primary">Année 2025-2026</span>
-          <span class="rounded-full bg-page px-2.5 py-1 text-xs font-medium text-muted">Consultation</span>
-        </div>
-
-        <!-- Deux cartes -->
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <section class="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 class="mb-4 text-lg font-bold text-[#1a1b22]">Informations de la classe</h2>
-            <dl class="divide-y divide-[#f3f4f6] text-sm">
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Filière</dt><dd class="font-medium text-[#1f2937]">Génie Logiciel</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Niveau</dt><dd class="font-medium text-[#1f2937]">Licence 3</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Salle</dt><dd class="font-medium text-[#1f2937]">A2</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Capacité</dt><dd class="font-medium text-[#1f2937]">40 places</dd></div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Inscrits</dt><dd class="font-medium text-[#1f2937]">28 étudiants</dd></div>
-              <div class="flex items-center justify-between py-2.5">
-                <dt class="text-muted">Taux de remplissage</dt>
-                <dd class="flex items-center gap-2"><span class="h-2 w-24 overflow-hidden rounded-full bg-[#f3f4f6]"><span class="block h-full rounded-full bg-primary" style="width:70%"></span></span><span class="text-sm font-semibold text-primary">70%</span></dd>
-              </div>
-              <div class="flex justify-between py-2.5"><dt class="text-muted">Formateur principal</dt><dd class="font-semibold text-[#1f2937]">Dr. Mamadou Kane</dd></div>
-            </dl>
-          </section>
-
-          <section class="flex flex-col rounded-2xl bg-white p-6 shadow-sm">
-            <h2 class="mb-4 text-lg font-bold text-[#1a1b22]">Répartition des étudiants</h2>
-            <div class="flex flex-1 items-center justify-center gap-12">
-              <div class="flex flex-col items-center gap-2">
-                <div class="flex h-20 w-20 items-center justify-center rounded-full border-[7px] border-[#2563eb] text-[#2563eb]"><svg class="h-8 w-8"><use href="#i-male" /></svg></div>
-                <p class="text-sm text-muted">Garçons : <span class="font-semibold text-[#1f2937]">18</span></p>
-              </div>
-              <div class="flex flex-col items-center gap-2">
-                <div class="flex h-20 w-20 items-center justify-center rounded-full border-[7px] border-[#db2777] text-[#db2777]"><svg class="h-8 w-8"><use href="#i-female" /></svg></div>
-                <p class="text-sm text-muted">Filles : <span class="font-semibold text-[#1f2937]">10</span></p>
-              </div>
+        <!-- Grille des classes -->
+        <section class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <?php if (count($mesClasses) === 0): ?>
+            <div class="col-span-full rounded-2xl bg-white p-10 text-center shadow-sm">
+              <p class="text-sm text-muted">Aucune classe ne vous est assignée pour l'instant.</p>
+              <p class="mt-1 text-xs text-muted">Une classe apparaît ici dès que vous avez un cours programmé dans l'emploi du temps.</p>
             </div>
-            <div class="mt-4 rounded-xl bg-[#ffdad7] px-4 py-3 text-center text-sm font-semibold text-primary">Moyenne générale de la classe : 13.2 / 20</div>
-          </section>
-        </div>
-
-        <!-- Liste des étudiants (lecture seule) -->
-        <section class="rounded-2xl bg-white p-6 shadow-sm">
-          <h2 class="mb-4 text-lg font-bold text-[#1a1b22]">Étudiants de la classe</h2>
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[640px] text-left text-sm">
-              <thead class="border-b border-[#e5e7eb] bg-[#f9fafb]">
-                <tr class="text-xs font-semibold uppercase tracking-[0.5px] text-[#6b7280]">
-                  <th class="px-4 py-3 font-semibold">N°</th><th class="px-4 py-3 font-semibold">Matricule</th><th class="px-4 py-3 font-semibold">Nom</th><th class="px-4 py-3 font-semibold">Prénom</th><th class="px-4 py-3 font-semibold">Sexe</th><th class="px-4 py-3 font-semibold">Moyenne</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-[#f3f4f6]">
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">1</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0045</td><td class="px-4 py-3 font-bold">Camara</td><td class="px-4 py-3 text-[#374151]">Toumany</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">14.5 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">2</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0046</td><td class="px-4 py-3 font-bold">Sy</td><td class="px-4 py-3 text-[#374151]">Fatou</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">16.2 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">3</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0047</td><td class="px-4 py-3 font-bold">Diallo</td><td class="px-4 py-3 text-[#374151]">Abdoulaye</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">12.8 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">4</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0048</td><td class="px-4 py-3 font-bold">Ndiaye</td><td class="px-4 py-3 text-[#374151]">Aminata</td><td class="px-4 py-3"><span class="rounded-full border border-[#fbcfe8] bg-[#fdf2f8] px-2 py-0.5 text-xs font-medium text-[#be185d]">Féminin</span></td><td class="px-4 py-3 font-medium">11.0 / 20</td></tr>
-                <tr class="hover:bg-[#f9fafb]"><td class="px-4 py-3 text-muted">5</td><td class="px-4 py-3 font-mono text-xs font-bold text-[#111827]">221-SN-2024-0049</td><td class="px-4 py-3 font-bold">Ba</td><td class="px-4 py-3 text-[#374151]">Ibrahima</td><td class="px-4 py-3"><span class="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-[#1d4ed8]">Masculin</span></td><td class="px-4 py-3 font-medium">15.3 / 20</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="mt-4 text-xs text-muted">Affichage de 1 à 5 sur 28 étudiants — consultation en lecture seule</p>
+          <?php else: ?>
+            <?php foreach ($mesClasses as $c): ?>
+              <?php $cap = (int)$c['capacite']; $taux = $cap > 0 ? round((int)$c['eff'] / $cap * 100) : 0; ?>
+              <a href="detailsClasseFormateur.php?id=<?= $c['id_classe'] ?>" class="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition hover:shadow-md">
+                <div class="h-1.5 bg-primary"></div>
+                <div class="flex flex-1 flex-col gap-3 p-5">
+                  <div class="flex items-start justify-between gap-3">
+                    <h3 class="font-bold text-[#1a1b22] group-hover:text-primary"><?= htmlspecialchars($c['nom_classe']) ?></h3>
+                    <?php if (!empty($c['salle'])): ?><span class="shrink-0 rounded-md border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted"><?= htmlspecialchars($c['salle']) ?></span><?php endif; ?>
+                  </div>
+                  <div class="space-y-1 text-sm text-muted">
+                    <p><span class="text-[#374151]">Filière :</span> <?= htmlspecialchars($c['nom_filiere']) ?></p>
+                    <p><span class="text-[#374151]">Niveau :</span> <?= htmlspecialchars($c['libelle_niveau']) ?></p>
+                  </div>
+                  <div class="mt-1">
+                    <div class="mb-1 flex items-center justify-between text-xs"><span class="font-medium text-muted">Effectif</span><span class="font-bold text-primary"><?= (int)$c['eff'] ?> / <?= $cap ?></span></div>
+                    <div class="h-2 overflow-hidden rounded-full bg-[#f3f4f6]"><div class="h-full rounded-full bg-primary" style="width:<?= $taux ?>%"></div></div>
+                  </div>
+                  <div class="mt-auto flex items-center justify-between border-t border-[#f3f4f6] pt-3">
+                    <span class="flex items-center gap-2 text-xs font-medium text-muted"><svg class="h-4 w-4 text-primary"><use href="#i-user" /></svg> <?= (int)$c['eff'] ?> étudiant<?= (int)$c['eff'] > 1 ? 's' : '' ?></span>
+                    <span class="flex items-center gap-1 text-xs font-medium text-primary">Voir <svg class="h-3.5 w-3.5"><use href="#i-chevron-right" /></svg></span>
+                  </div>
+                </div>
+              </a>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </section>
       </div>
     </main>
